@@ -117,6 +117,23 @@ public class DataSeeder
             result.ContextChunksIngested++;
         }
         _log.LogInformation("Context ingestion complete for {Name}", tenantName);
+
+        // ── Admin user ────────────────────────────────────────────────────────
+        if (!await _db.TenantUsers.AnyAsync(u => u.TenantId == tenantId && u.Username == "admin", ct))
+        {
+            _db.TenantUsers.Add(new Core.Entities.TenantUser
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                Username = "admin",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!", workFactor: 10),
+                Role = Core.Enums.UserRole.Admin,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync(ct);
+            _log.LogInformation("Created admin user for {Name}", tenantName);
+        }
     }
 }
 

@@ -11,4 +11,5 @@ public class Tenant
     public ICollection<BusinessContext> BusinessContexts { get; set; } = new List<BusinessContext>();
     public ICollection<Department> Departments { get; set; } = new List<Department>();
     public ICollection<Artifact> Artifacts { get; set; } = new List<Artifact>();
+    public ICollection<TenantUser> Users { get; set; } = new List<TenantUser>();
 }

@@ -10,6 +10,16 @@ export class ApiError extends Error {
   }
 }
 
+function getStoredToken(): string | null {
+  try {
+    const raw = localStorage.getItem('bi_auth')
+    if (!raw) return null
+    return JSON.parse(raw).token ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit & { tenantId?: string } = {},
@@ -21,21 +31,27 @@ export async function apiFetch<T>(
     ...(fetchOptions.headers as Record<string, string> | undefined),
   }
 
-  if (tenantId) {
-    headers['X-Tenant-Id'] = tenantId
-  }
+  if (tenantId) headers['X-Tenant-Id'] = tenantId
+
+  const token = getStoredToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
 
   const response = await fetch(`${BASE_URL}${path}`, {
     ...fetchOptions,
     headers,
   })
 
+  if (response.status === 401) {
+    localStorage.removeItem('bi_auth')
+    window.location.href = '/login'
+    throw new ApiError(401, 'Session expired. Please log in again.')
+  }
+
   if (!response.ok) {
     const text = await response.text().catch(() => response.statusText)
     throw new ApiError(response.status, text || `HTTP ${response.status}`)
   }
 
-  // Handle empty responses (e.g. 204 No Content)
   const contentType = response.headers.get('content-type') ?? ''
   if (!contentType.includes('application/json') && response.status === 204) {
     return undefined as unknown as T

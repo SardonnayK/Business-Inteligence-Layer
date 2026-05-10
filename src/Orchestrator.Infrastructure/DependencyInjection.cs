@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<IHybridRagService, HybridRagService>();
         services.AddScoped<IArtifactSupervisorService, ArtifactSupervisorService>();
         services.AddScoped<IGuardrailService, GuardrailService>();
+        services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<DataSeeder>();
 
         return services;

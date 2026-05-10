@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Orchestrator.Core.Interfaces;
@@ -7,6 +9,7 @@ namespace Orchestrator.Api.Controllers;
 
 [ApiController]
 [Route("api/departments")]
+[Authorize]
 public class DepartmentController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -18,12 +21,13 @@ public class DepartmentController : ControllerBase
         _supervisorService = supervisorService;
     }
 
+    private Guid GetTenantId() => Guid.Parse(User.FindFirstValue("tenant_id")!);
+
     /// <summary>List all departments for the tenant, with artifact count.</summary>
     [HttpGet]
-    public async Task<IActionResult> GetDepartments(
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
-        CancellationToken ct)
+    public async Task<IActionResult> GetDepartments(CancellationToken ct)
     {
+        var tenantId = GetTenantId();
         var departments = await _db.Departments
             .AsNoTracking()
             .Where(d => d.TenantId == tenantId)
@@ -41,8 +45,9 @@ public class DepartmentController : ControllerBase
         return Ok(departments);
     }
 
-    /// <summary>Run AI-assisted department and artifact discovery for a tenant.</summary>
+    /// <summary>Run AI-assisted department and artifact discovery for a tenant. Admin only.</summary>
     [HttpPost("/api/tenants/{id:guid}/discover-departments")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DiscoverDepartments(Guid id, CancellationToken ct)
     {
         var result = await _supervisorService.DiscoverDepartmentsAsync(id, ct);

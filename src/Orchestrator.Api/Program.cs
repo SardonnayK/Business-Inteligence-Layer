@@ -1,5 +1,8 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Tokens;
+using Orchestrator.Api.Auth;
 using Orchestrator.Api.Middleware;
 using Orchestrator.Infrastructure;
 using Orchestrator.Infrastructure.Data;
@@ -18,6 +21,27 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod();
     });
 });
+
+var jwtSecret = builder.Configuration["Jwt:Secret"]
+    ?? "dev-secret-key-change-in-production-must-be-32-chars!";
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = "BILayer",
+            ValidateAudience = true,
+            ValidAudience = "BILayer",
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
+        };
+    });
+
+builder.Services.AddAuthorization();
+builder.Services.AddScoped<JwtTokenGenerator>();
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
@@ -39,8 +63,6 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 
-    // Seed both competitor tenants with relational data + embedded business context.
-    // Idempotent — safe to call multiple times. Requires a valid OpenAI:ApiKey.
     app.MapPost("/api/dev/seed", async (DataSeeder seeder, CancellationToken ct) =>
     {
         var result = await seeder.SeedAsync(ct);
@@ -49,6 +71,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("dashboard");
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseMiddleware<GuardrailMiddleware>();
 app.MapControllers();
 app.MapDefaultEndpoints();

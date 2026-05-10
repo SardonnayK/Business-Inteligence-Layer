@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Orchestrator.Core.Entities;
@@ -8,6 +9,7 @@ namespace Orchestrator.Api.Controllers;
 
 [ApiController]
 [Route("api/embedding-config")]
+[Authorize]
 public class EmbeddingConfigController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -80,6 +82,7 @@ public class EmbeddingConfigController : ControllerBase
 
     /// <summary>Upsert the system-default embedding provider config (TenantId IS NULL).</summary>
     [HttpPut("system")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpsertSystemConfig(
         [FromBody] EmbeddingConfigRequest request,
         CancellationToken ct)
@@ -123,6 +126,7 @@ public class EmbeddingConfigController : ControllerBase
 
     /// <summary>Upsert the embedding provider config for a specific tenant.</summary>
     [HttpPut("tenant/{id:guid}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpsertTenantConfig(
         Guid id,
         [FromBody] EmbeddingConfigRequest request,
@@ -145,6 +149,7 @@ public class EmbeddingConfigController : ControllerBase
 
     /// <summary>Remove a tenant-specific embedding provider override (tenant reverts to system default).</summary>
     [HttpDelete("tenant/{id:guid}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteTenantConfig(Guid id, CancellationToken ct)
     {
         var config = await _db.EmbeddingProviderConfigs

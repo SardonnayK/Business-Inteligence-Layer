@@ -13,4 +13,5 @@ public class Artifact
     public Tenant Tenant { get; set; } = null!;
     public Department? Department { get; set; }
     public ICollection<BusinessContext> BusinessContexts { get; set; } = new List<BusinessContext>();
+    public ICollection<ArtifactPermission> Permissions { get; set; } = new List<ArtifactPermission>();
 }

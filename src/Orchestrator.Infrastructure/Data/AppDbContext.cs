@@ -14,6 +14,8 @@ public class AppDbContext : DbContext
     public DbSet<EmbeddingProviderConfig> EmbeddingProviderConfigs => Set<EmbeddingProviderConfig>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Artifact> Artifacts => Set<Artifact>();
+    public DbSet<TenantUser> TenantUsers => Set<TenantUser>();
+    public DbSet<ArtifactPermission> ArtifactPermissions => Set<ArtifactPermission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -26,6 +28,7 @@ public class AppDbContext : DbContext
             b.HasMany(t => t.BusinessContexts).WithOne(bc => bc.Tenant).HasForeignKey(bc => bc.TenantId);
             b.HasMany(t => t.Departments).WithOne(d => d.Tenant).HasForeignKey(d => d.TenantId);
             b.HasMany(t => t.Artifacts).WithOne(a => a.Tenant).HasForeignKey(a => a.TenantId);
+            b.HasMany(t => t.Users).WithOne(u => u.Tenant).HasForeignKey(u => u.TenantId);
         });
 
         modelBuilder.Entity<Project>(b =>
@@ -70,8 +73,27 @@ public class AppDbContext : DbContext
         {
             b.HasKey(a => a.Id);
             b.HasMany(a => a.BusinessContexts).WithOne(bc => bc.Artifact).HasForeignKey(bc => bc.ArtifactId).IsRequired(false);
+            b.HasMany(a => a.Permissions).WithOne(ap => ap.Artifact).HasForeignKey(ap => ap.ArtifactId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(a => a.TenantId);
             b.HasIndex(a => a.DepartmentId);
+        });
+
+        modelBuilder.Entity<TenantUser>(b =>
+        {
+            b.HasKey(u => u.Id);
+            b.Property(u => u.Role).HasConversion<int>();
+            b.HasIndex(u => u.TenantId);
+            b.HasIndex(u => new { u.TenantId, u.Username }).IsUnique();
+            b.HasMany(u => u.ArtifactPermissions).WithOne(ap => ap.User)
+                .HasForeignKey(ap => ap.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ArtifactPermission>(b =>
+        {
+            b.HasKey(ap => ap.Id);
+            b.HasIndex(ap => ap.UserId);
+            b.HasIndex(ap => ap.ArtifactId);
+            b.HasIndex(ap => new { ap.UserId, ap.ArtifactId }).IsUnique();
         });
     }
 }
