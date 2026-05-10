@@ -6,8 +6,12 @@ var postgres = builder.AddPostgres("postgres")
 
 var db = postgres.AddDatabase("orchestrator");
 
-builder.AddProject<Projects.Orchestrator_Api>("api")
+var api = builder.AddProject<Projects.Orchestrator_Api>("api")
     .WithReference(db)
     .WaitFor(db);
+
+builder.AddViteApp("dashboard", "../../src/dashboard")
+    .WithReference(api)
+    .WithEnvironment("BROWSER", "none");
 
 builder.Build().Run();

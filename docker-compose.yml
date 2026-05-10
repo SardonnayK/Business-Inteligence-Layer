@@ -32,5 +32,16 @@ services:
       db:
         condition: service_healthy
 
+  dashboard:
+    build:
+      context: ./src/dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://app:8080
+    depends_on:
+      - app
+
 volumes:
   postgres_data:
