@@ -2,15 +2,107 @@
 
 ## General conventions
 
-**Base URL (Aspire):** `http://localhost:<port>` — the exact port is shown in the Aspire dashboard next to the `api` resource. It is randomised on each run unless you pin it.
+**Base URL (Aspire):** `http://localhost:<port>` — shown in the Aspire dashboard next to the `api` resource.
 
 **Base URL (docker-compose):** `http://localhost:8080`
 
 **OpenAPI schema:** `GET /openapi/v1.json` — only served when `ASPNETCORE_ENVIRONMENT=Development`.
 
-**Tenant identification:** Every business-context endpoint requires an `X-Tenant-Id` header containing a GUID. This is the primary isolation boundary. Requests without a valid tenant ID that find no matching tenant will get an empty result set (search) or a 500 (ingest, if the tenant row doesn't exist in the DB).
+**Tenant identification:** Business-context, department, and artifact endpoints require an `X-Tenant-Id` header containing a GUID. This is the primary isolation boundary.
 
-**Content-Type:** All POST bodies are `application/json`. All responses are `application/json`.
+**Content-Type:** All POST/PUT bodies are `application/json`. All responses are `application/json`.
+
+---
+
+## Embedding provider configuration
+
+### PUT /api/embedding-config/system
+
+Create or replace the system-wide default provider configuration. This applies to all tenants that do not have a tenant-specific override.
+
+**Request body**
+
+```json
+{
+  "providerType": "OpenAI | AzureOpenAI | Ollama",
+  "modelId": "text-embedding-ada-002",
+  "apiKey": "sk-... (required for OpenAI and AzureOpenAI; omit for Ollama)",
+  "endpoint": "https://... (required for AzureOpenAI; optional for OpenAI/Ollama)",
+  "chatModelId": "gpt-4o (optional — enables AI supervisor routing and department discovery)"
+}
+```
+
+**Example — Ollama (local, no API key)**
+
+```bash
+curl -s -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"providerType":"Ollama","modelId":"nomic-embed-text","endpoint":"http://localhost:11434","chatModelId":"llama3"}' \
+  http://localhost:8080/api/embedding-config/system
+```
+
+**Response 200 OK**
+
+```json
+{
+  "id": "...",
+  "tenantId": null,
+  "providerType": "Ollama",
+  "modelId": "nomic-embed-text",
+  "endpoint": "http://localhost:11434",
+  "hasApiKey": false,
+  "chatModelId": "llama3",
+  "updatedAt": "2026-05-10T09:00:00Z"
+}
+```
+
+`apiKey` is never returned in any response. `hasApiKey` indicates whether a key is stored.
+
+---
+
+### GET /api/embedding-config/system
+
+Returns the current system-wide default config. Returns 404 if none has been configured yet.
+
+---
+
+### PUT /api/embedding-config/tenant/{tenantId}
+
+Create or replace a provider configuration for a specific tenant. Overrides the system default for that tenant.
+
+```bash
+curl -s -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"providerType":"OpenAI","modelId":"text-embedding-3-large","apiKey":"sk-...","chatModelId":"gpt-4o"}' \
+  http://localhost:8080/api/embedding-config/tenant/a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1
+```
+
+---
+
+### GET /api/embedding-config/tenant/{tenantId}
+
+Returns the tenant-specific config, or 404 if none exists for that tenant (does not fall back to the system default in this response).
+
+---
+
+### DELETE /api/embedding-config/tenant/{tenantId}
+
+Removes the tenant-specific override. After deletion the tenant uses the system default.
+
+---
+
+### GET /api/embedding-config/providers
+
+Returns the list of supported provider types with metadata about which fields each requires:
+
+```json
+[
+  { "value": "None",         "label": "Not configured",   "requiresApiKey": false, "requiresEndpoint": false },
+  { "value": "OpenAI",       "label": "OpenAI",           "requiresApiKey": true,  "requiresEndpoint": false },
+  { "value": "AzureOpenAI",  "label": "Azure OpenAI",     "requiresApiKey": true,  "requiresEndpoint": true  },
+  { "value": "Ollama",       "label": "Ollama (local)",   "requiresApiKey": false, "requiresEndpoint": false }
+]
+```
 
 ---
 
@@ -18,7 +110,7 @@
 
 ### POST /api/business-context
 
-Ingest a text chunk into a tenant's knowledge base. The system calls OpenAI's `text-embedding-ada-002` model to generate a 1 536-dimension vector, then persists both the original text and the vector together.
+Ingest a text chunk. The AI supervisor decides which artifact the text belongs to. The configured embedding model generates a vector, and both are persisted.
 
 **Headers**
 
@@ -31,9 +123,9 @@ Ingest a text chunk into a tenant's knowledge base. The system calls OpenAI's `t
 
 ```json
 {
-  "text": "string (required) — the text to embed and store",
-  "source": "string or null — a label identifying where this text came from (e.g. a document name or URL)",
-  "category": "string or null — a topic label for filtering or display purposes"
+  "text": "string (required)",
+  "source": "string or null",
+  "category": "string or null"
 }
 ```
 
@@ -51,42 +143,51 @@ curl -s -X POST \
   http://localhost:8080/api/business-context
 ```
 
-**Example response (200 OK)**
+**Response 200 OK**
 
 ```json
 {
-  "id": "3f7c2a1e-0000-0000-0000-000000000000",
-  "tenantId": "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
+  "id": "3f7c2a1e-...",
+  "tenantId": "a1a1a1a1-...",
+  "artifactId": "e5d3c2b1-...",
+  "artifactName": "Competitive Strategy",
+  "departmentId": "f9a8b7c6-...",
+  "departmentName": "Sales",
+  "isShared": false,
   "createdAt": "2026-05-10T09:14:22.341Z"
 }
 ```
 
-The embedding vector is stored in the database but is never returned in the API response. Only the metadata is returned.
+When `isShared` is `true`, the chunk was routed to the company-wide shared artifact; `departmentId` and `departmentName` will be null.
 
 **Notes**
-- Each call makes one API request to OpenAI. If the OpenAI key is missing or invalid the request will fail.
-- There is no deduplication. Calling with the same text twice creates two rows.
+- The AI supervisor runs before embedding. If no `ChatModelId` is configured, the chunk goes to the shared artifact automatically.
+- There is no deduplication. The same text submitted twice creates two rows.
 
 ---
 
 ### GET /api/business-context/search
 
-Search a tenant's knowledge base using a natural-language query. The query is embedded using the same model as ingest, and the results are ranked by L2 (Euclidean) vector distance — closest embedding first. Results are always scoped to the tenant in the header; no other tenant's data is ever returned.
+Search a tenant's knowledge base. Results are ranked by vector similarity (L2 distance).
 
 **Headers**
 
-| Header | Required | Description |
-|---|---|---|
-| `X-Tenant-Id` | Yes | The tenant's GUID |
+| Header | Required |
+|---|---|
+| `X-Tenant-Id` | Yes |
 
 **Query parameters**
 
 | Parameter | Required | Default | Description |
 |---|---|---|---|
-| `query` | Yes | — | The natural-language search query |
-| `topK` | No | `5` | Maximum number of results to return |
+| `query` | Yes | — | Natural-language query |
+| `topK` | No | `5` | Maximum results |
+| `artifactId` | No | — | Narrows search to a single artifact |
+| `departmentId` | No | — | Narrows search to all artifacts in a department |
 
-**Example request**
+When both `artifactId` and `departmentId` are omitted, the search spans all chunks for the tenant.
+
+**Example — tenant-wide search**
 
 ```bash
 curl -s \
@@ -94,51 +195,159 @@ curl -s \
   "http://localhost:8080/api/business-context/search?query=rural+broadband+commitments&topK=2"
 ```
 
-**Example response (200 OK)**
+**Example — scoped to a specific artifact**
+
+```bash
+curl -s \
+  -H "X-Tenant-Id: a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1" \
+  "http://localhost:8080/api/business-context/search?query=SLA+penalties&artifactId=<artifact-uuid>"
+```
+
+**Response 200 OK**
 
 ```json
 [
   {
-    "id": "1a2b3c4d-0000-0000-0000-000000000001",
-    "text": "SwiftFibre is committed to bringing genuine gigabit fibre to rural and semi-rural communities overlooked by larger providers. Our rural coverage commitment: any node we build in a rural area launches at a minimum of 100Mbps symmetric, with a roadmap targeting full 1Gbps symmetrical availability across all rural sites by end of 2026.",
+    "id": "1a2b3c4d-...",
+    "text": "SwiftFibre rural coverage commitment...",
     "source": "SwiftFibre Rural Coverage Commitment — Public Statement",
     "category": "rural_coverage",
-    "createdAt": "2026-05-10T08:00:00.000Z"
-  },
-  {
-    "id": "1a2b3c4d-0000-0000-0000-000000000002",
-    "text": "We know rural customers are sceptical — they have been promised fast broadband before and let down. That is why our rural rollout includes a 90-day performance guarantee: if a rural customer does not receive at least 80% of their advertised speed during the first 90 days, they can exit with no penalty and keep the router.",
-    "source": "SwiftFibre Rural Coverage Commitment — Public Statement",
-    "category": "rural_coverage",
-    "createdAt": "2026-05-10T08:00:00.000Z"
+    "artifactId": "...",
+    "artifactName": "Rural Coverage",
+    "createdAt": "2026-05-10T08:00:00Z"
   }
 ]
 ```
 
-**Notes**
-- An empty array `[]` is a valid response when no chunks exist for the tenant, or when topK results cannot be found.
-- The ranking is purely by vector similarity. There is no BM25 or keyword component in the current implementation.
-- Each call makes one API request to OpenAI to embed the query.
+An empty array is a valid response.
+
+---
+
+## Department endpoints
+
+### GET /api/departments
+
+List all departments for a tenant, with the count of artifacts in each.
+
+**Headers:** `X-Tenant-Id: <guid>`
+
+**Response 200 OK**
+
+```json
+[
+  {
+    "id": "...",
+    "name": "Engineering",
+    "description": "Technical standards, processes and architecture",
+    "estimatedSize": "large",
+    "createdAt": "2026-05-10T...",
+    "artifactCount": 3
+  }
+]
+```
+
+---
+
+### POST /api/tenants/{id}/discover-departments
+
+Trigger AI-assisted department and artifact discovery. The supervisor samples up to 30 existing chunks, identifies distinct departments, and creates the appropriate artifact structure. Idempotent — departments and artifacts whose names already exist are skipped.
+
+**No request body or headers required.** The tenant ID is in the path.
+
+**Response 200 OK**
+
+```json
+{
+  "wasAiAssisted": true,
+  "departments": [
+    { "id": "...", "name": "Sales", "description": "...", "estimatedSize": "small", "createdAt": "..." }
+  ],
+  "artifacts": [
+    { "id": "...", "name": "Sales Playbook", "description": "...", "isShared": false, "departmentId": "...", "tenantId": "...", "createdAt": "..." }
+  ]
+}
+```
+
+When `wasAiAssisted` is `false`, no `ChatModelId` was configured — a fallback `"General"` department with a single artifact was created instead.
+
+---
+
+## Artifact endpoints
+
+### GET /api/artifacts
+
+List all artifacts for a tenant, including the shared artifact. Each entry includes a chunk count and the owning department name.
+
+**Headers:** `X-Tenant-Id: <guid>`
+
+**Response 200 OK**
+
+```json
+[
+  {
+    "id": "...",
+    "name": "Company Knowledge",
+    "description": "Company-wide goals, mission and cross-cutting policies",
+    "isShared": true,
+    "departmentId": null,
+    "departmentName": null,
+    "chunkCount": 4,
+    "createdAt": "..."
+  },
+  {
+    "id": "...",
+    "name": "Technical Standards",
+    "description": "Engineering technical standards and architecture decisions",
+    "isShared": false,
+    "departmentId": "...",
+    "departmentName": "Engineering",
+    "chunkCount": 12,
+    "createdAt": "..."
+  }
+]
+```
+
+---
+
+### GET /api/artifacts/{id}/contexts
+
+List all `BusinessContext` chunks stored in a specific artifact.
+
+**Response 200 OK**
+
+```json
+[
+  {
+    "id": "...",
+    "text": "...",
+    "source": "...",
+    "category": "...",
+    "createdAt": "..."
+  }
+]
+```
+
+---
+
+### DELETE /api/artifacts/{id}/contexts
+
+Clear all chunks from an artifact without deleting the artifact itself. Used to re-ingest updated content into a clean artifact.
+
+**Response 204 No Content**
 
 ---
 
 ## Development-only endpoints
 
-These endpoints are only registered when `ASPNETCORE_ENVIRONMENT=Development`. They return `404 Not Found` in production.
+Available only when `ASPNETCORE_ENVIRONMENT=Development`.
 
 ### POST /api/dev/seed
 
-Populates the database with two tenants (FibreCore Networks and SwiftFibre), their projects, requirements, and embedded business context chunks. Safe to call multiple times — each entity is checked for existence before insertion, and context chunks are skipped if the count already matches.
+Populates the database with two tenants (FibreCore Networks and SwiftFibre), their projects, requirements, and embedded business context chunks. Idempotent — each entity is checked for existence before insertion.
 
 **No headers or request body required.**
 
-**Example request**
-
-```bash
-curl -s -X POST http://localhost:8080/api/dev/seed
-```
-
-**Example response (200 OK) — first run**
+**Response 200 OK — first run**
 
 ```json
 {
@@ -149,83 +358,40 @@ curl -s -X POST http://localhost:8080/api/dev/seed
 }
 ```
 
-**Example response (200 OK) — subsequent runs (all data already exists)**
-
-```json
-{
-  "tenantsCreated": 0,
-  "projectsCreated": 0,
-  "requirementsCreated": 0,
-  "contextChunksIngested": 0
-}
-```
-
 **Notes**
-- This makes 30 OpenAI embedding API calls (15 per tenant). It takes several seconds and uses a small amount of API credit.
-- The seeded tenant GUIDs are fixed and documented in the data model reference.
-- This endpoint exists purely to make local development and demonstrations self-contained. It would not be appropriate to expose in any shared or production environment.
+- The seeder uses whatever embedding provider is configured at the time of the call. Configure a provider first via `PUT /api/embedding-config/system`.
+- Seeded tenant GUIDs are fixed and documented in the data model reference.
 
 ---
 
 ## Health endpoints
 
-These are registered by `Orchestrator.ServiceDefaults` and are always available regardless of environment.
-
 ### GET /health
 
-Reports whether the application and all its registered health checks are healthy. The database connection is monitored automatically via the Npgsql Aspire integration.
-
-**Example request**
-
-```bash
-curl -s http://localhost:8080/health
-```
-
-**Example response — healthy**
+Reports whether the application and its registered health checks are healthy. The database connection is monitored automatically.
 
 ```
 Healthy
 ```
 
-**Example response — unhealthy (database unreachable)**
-
-```
-Unhealthy
-```
-
-The response body is a plain string, not JSON.
-
 ### GET /alive
 
-A liveness probe — confirms the process is running and responding to HTTP. Does not check downstream dependencies. Suitable for use as a container liveness probe where you only care whether the process is up.
-
-```bash
-curl -s http://localhost:8080/alive
-```
-
-Returns `Healthy` when the process is running.
+Liveness probe — confirms the process is running. Does not check the database.
 
 ---
 
-## The guardrail pipeline — important note
+## Guardrail pipeline
 
-`GuardrailMiddleware` is registered in the request pipeline. It intercepts any request whose path starts with `/api/generate` and buffers the response body before validating it against the guardrail service.
+`GuardrailMiddleware` is registered and intercepts requests whose path starts with `/api/generate`. It buffers the response body and validates it against `IGuardrailService`.
 
-**However: no controllers or endpoints exist at `/api/generate/*` in the current codebase.**
+**No `/api/generate/*` controllers currently exist.** The middleware is correctly wired and will fire when those endpoints are added.
 
-This means the middleware is correctly wired and will fire when those endpoints are built, but it never fires today because there is nothing to intercept. If you send a request to `/api/generate/anything` right now, you will receive a `404 Not Found` from the ASP.NET Core routing layer — the middleware sees a 404 response, and since it passes through without violation, the 404 is returned to the caller unchanged.
-
-When `/api/generate/*` endpoints are added in future, the guardrail flow will be:
-
-1. Request hits the API.
-2. Middleware detects the `/api/generate` prefix.
-3. Middleware replaces the response stream with an in-memory buffer.
-4. The controller runs and writes its AI-generated content to the buffer.
-5. Middleware reads the buffer and calls `IGuardrailService.ValidateAsync`.
-6. If the tenant is not found or is inactive → **422 Unprocessable Entity** with `{ "error": "Guardrail violation", "reason": "..." }`.
-7. If validation passes (currently: tenant exists and is active) → the buffered response is flushed to the real response stream and returned normally.
-
-The `GuardrailService.ValidateAsync` implementation currently only checks tenant existence and the `IsActive` flag. The comment in the code explicitly marks the policy evaluation logic as an extension point for future rule loading.
+When they are added, the validation flow is:
+1. Middleware buffers the entire response.
+2. Reads `X-Tenant-Id` header.
+3. Looks up the tenant in the DB.
+4. If tenant not found or `IsActive = false` → HTTP 422 `{"error":"Guardrail violation","reason":"..."}`.
+5. Otherwise → flushes the buffered response to the client.
 
 ---
 
@@ -233,8 +399,9 @@ The `GuardrailService.ValidateAsync` implementation currently only checks tenant
 
 | Scenario | Status | Body |
 |---|---|---|
-| Guardrail violation (future, when `/api/generate` exists) | 422 | `{"error":"Guardrail violation","reason":"<message>"}` |
-| Missing route | 404 | ASP.NET Core default problem details |
-| Unhandled exception | 500 | ASP.NET Core default problem details |
+| Guardrail violation (future `/api/generate/*` routes) | 422 | `{"error":"Guardrail violation","reason":"..."}` |
+| No embedding provider configured | 500 | Problem details with message |
+| Missing route | 404 | ASP.NET Core problem details |
+| Unhandled exception | 500 | ASP.NET Core problem details |
 
-There is no authentication or authorisation middleware in the current codebase. The `X-Tenant-Id` header is not validated as a bearer token or signature — it is read as a plain GUID. Any caller who knows a tenant's GUID can query that tenant's data.
+No authentication or authorisation middleware exists. The `X-Tenant-Id` header is not validated against a token or signature — any caller who knows a tenant GUID can access that tenant's data.

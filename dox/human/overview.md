@@ -1,85 +1,266 @@
 # Overview
 
-## What this system is and why it exists
+## What this system is
 
-The Business Intelligence Layer is an AI orchestration backend. Its job is to let multiple organisations ("tenants") each store their own private knowledge base, and then let AI-powered features query that knowledge base in a way that is scoped strictly to that organisation and validated by configurable guardrails before any generated content leaves the system.
+The Business Intelligence Layer is a multi-tenant RAG (Retrieval-Augmented Generation) platform. Each organisation ("tenant") maintains its own private knowledge base — internal policies, strategy documents, operational rules, regulatory constraints. The platform converts that knowledge into vector embeddings, organises it into a structured hierarchy of departments and artifacts, and retrieves the most relevant context on demand using semantic search.
 
-In plain terms: each tenant pushes text into the system (pricing policies, sales strategies, operational rules, regulatory constraints, etc.). The system converts that text into numerical vector embeddings using OpenAI's `text-embedding-ada-002` model and stores them in a PostgreSQL database alongside the original text. When something wants to look up relevant context — for example, to answer a question or generate a document — it sends a natural-language query, the system finds the most semantically similar chunks from that tenant's data, and returns them. If AI-generated text eventually flows through the system, a guardrail pipeline intercepts it and can reject it before it reaches the caller.
+The system is **embedding-provider agnostic**: it works with OpenAI, Azure OpenAI, local Ollama models, or any compatible API. No specific vendor is required at startup — providers are configured through the API and stored per tenant.
 
-The design is clean-architecture: a thin domain layer, a concrete infrastructure layer, a Semantic Kernel plugin layer, and an ASP.NET Core API on top.
-
----
-
-## The two-competitor scenario (FibreCore vs SwiftFibre)
-
-The seeded demonstration data imagines two competing broadband companies that are both using this platform simultaneously. This is the clearest way to see the multi-tenant isolation in practice.
-
-**FibreCore Networks** is the incumbent. It holds 75 % of the market, focuses on dense metropolitan areas, prices at a premium, and is methodical and process-heavy. Its internal strategy documents emphasise margin protection, selective discounting that needs committee approval, long enterprise contracts, and a measured competitive-response posture. When a rival gains 5 % market share over two quarters, the response is a formal Executive Committee review — not an immediate price cut.
-
-**SwiftFibre** is the challenger. It holds 25 % of the market and is growing aggressively. It prices its plans at least 20 % below FibreCore's equivalent tier, targets suburban and rural postcodes that FibreCore has deprioritised, and moves fast — its stated goal is to go from permit approval to a street cluster being live in under 45 days. Its strategy documents openly name FibreCore as the problem they exist to solve.
-
-Both companies have:
-- A `Tenant` record in the database with a stable GUID
-- Several `Project` records representing active workstreams
-- `Requirement` records attached to those projects, describing system and business rules the software must enforce
-- A set of `BusinessContext` chunks — the actual natural-language knowledge base — each embedded and stored as a 1 536-dimension vector
-
-When you query the system for FibreCore's pricing strategy, you get FibreCore's internal documents. When you query for SwiftFibre's pricing strategy with SwiftFibre's tenant ID, you get a completely different set of documents. The two tenants share the same database tables but are completely isolated at query time because every query is filtered by `TenantId` before the vector similarity ranking is applied.
-
-This isolation also extends to the guardrail: when AI output is validated, the service looks up the tenant to verify it exists and is active before any policy evaluation runs.
+An **AI supervisor** runs on every ingestion. Rather than dumping all knowledge into a single flat pool, the supervisor routes each piece of text to the correct *artifact* (a scoped knowledge document) within the right department, keeping the knowledge base organised automatically as it grows.
 
 ---
 
-## What you can actually do with it today vs what is scaffolded
+## Key concepts
 
-### Working today
-
-**Ingest text into a tenant's knowledge base.** Send a POST request to `/api/business-context` with an `X-Tenant-Id` header and a JSON body containing the text, an optional source label, and an optional category label. The system calls OpenAI to generate an embedding, stores both the text and the vector in PostgreSQL, and returns the new record's ID.
-
-**Search a tenant's knowledge base semantically.** Send a GET request to `/api/business-context/search` with the same header and a `query` string parameter. The system embeds the query, then runs a combined PostgreSQL filter (`WHERE TenantId = ?`) and vector distance sort (`ORDER BY embedding <-> query_vector`) to return the top-K most relevant chunks. This is the hybrid RAG query at the heart of the system.
-
-**Seed the demonstration data.** In Development mode, a POST to `/api/dev/seed` inserts both FibreCore and SwiftFibre with all their projects, requirements, and embedded context chunks. The operation is idempotent — calling it twice does not create duplicates.
-
-**Health checks.** `/health` and `/alive` are provided by the Aspire service defaults and work out of the box.
-
-**OpenAPI schema.** In Development mode, `/openapi/v1.json` is served.
-
-**Integration tests.** A test project spins up a real pgvector container via Testcontainers and verifies that ingest persists correctly, that searches return tenant-scoped results in similarity order, and that searches do not leak data across tenants.
-
-### Scaffolded but not yet functional
-
-**The guardrail pipeline.** `GuardrailMiddleware` is wired and running. It intercepts every request whose path begins with `/api/generate`. However, no controller exists under `/api/generate`. This means the middleware is in place and correct, but it never fires in the current codebase because there are no endpoints for it to intercept. The guardrail service itself only checks tenant existence and active status — the comment in the code explicitly marks the policy-evaluation step as an extension point.
-
-**The Semantic Kernel plugin.** `BusinessContextPlugin` in the `Orchestrator.Engine` project wraps the RAG search as a Semantic Kernel `[KernelFunction]`, ready to be registered with a kernel and used in an AI agent pipeline. No controller or endpoint currently invokes this plugin.
-
-In short: the storage, embedding, retrieval, and isolation foundations are real and working. The AI generation and guardrail enforcement layers are correctly designed and partially implemented, but there are no endpoints to drive them yet.
+| Concept | Description |
+|---|---|
+| **Tenant** | An organisation using the platform. All data is isolated by tenant ID. |
+| **Department** | A division within a tenant (e.g. Engineering, HR, Sales). Discovered automatically by the AI or created manually. |
+| **Artifact** | A scoped knowledge document within a department. A large department may have several artifacts; a small one has one. |
+| **Shared Artifact** | One special artifact per tenant, not owned by any department — holds company-wide goals, mission, and cross-cutting policies. |
+| **BusinessContext** | A single text chunk with its vector embedding. Always stored inside an artifact. |
+| **Supervisor** | An LLM-powered routing agent. On each ingest it reads the text, looks at the tenant's artifact catalog, and decides where the new content belongs. |
+| **EmbeddingProviderConfig** | Per-tenant (or system-wide default) configuration selecting which AI provider and model to use for both embeddings and the supervisor LLM. |
 
 ---
 
-## The architecture in plain language
+## System architecture
 
-The system has seven projects divided into two groups.
+```mermaid
+graph TD
+    subgraph Aspire["Aspire Orchestration"]
+        AppHost["Orchestrator.AppHost"]
+    end
 
-### The application layer (Clean Architecture)
+    subgraph App["Application (Clean Architecture)"]
+        Api["Orchestrator.Api\nASP.NET Core 10"]
+        Engine["Orchestrator.Engine\nSemantic Kernel Plugin"]
+        Infra["Orchestrator.Infrastructure\nEF Core · Services · Migrations"]
+        Core["Orchestrator.Core\nEntities · Interfaces"]
+    end
 
-**Orchestrator.Core** contains the domain — the entity classes (`Tenant`, `Project`, `Requirement`, `BusinessContext`) and the service interfaces (`IHybridRagService`, `IGuardrailService`). Nothing in Core depends on anything external. It does not know about databases, HTTP, or OpenAI.
+    subgraph Frontend["Dashboard"]
+        UI["React + Vite + TypeScript\nsrc/dashboard"]
+    end
 
-**Orchestrator.Infrastructure** is where the real work happens. It holds the Entity Framework Core database context, the migration history, the `HybridRagService` implementation (which actually calls OpenAI and queries PostgreSQL with pgvector), the `GuardrailService` implementation, and the `DataSeeder`. It depends on Core, PostgreSQL (via Npgsql), pgvector, and the `Microsoft.Extensions.AI` embedding abstraction.
+    subgraph Shared["Shared"]
+        Defaults["Orchestrator.ServiceDefaults\nOTel · Health · Resilience"]
+    end
 
-**Orchestrator.Engine** contains the Semantic Kernel plugin. It sits between Infrastructure and the API, giving the RAG search capability an interface that a Semantic Kernel agent can discover and call automatically as a tool. It depends on Core (and therefore indirectly on Infrastructure at runtime).
+    subgraph Data["Data"]
+        PG[("PostgreSQL 16\n+ pgvector")]
+    end
 
-**Orchestrator.Api** is the HTTP layer — ASP.NET Core controllers, the guardrail middleware, and the application entry point. It depends on Infrastructure and Engine.
+    subgraph Providers["AI Providers (pluggable)"]
+        OAI["OpenAI / Azure OpenAI"]
+        Ollama["Ollama (local)"]
+    end
 
-**Orchestrator.Tests** is the xUnit integration test project. It uses Testcontainers to start a real pgvector container for each test run.
+    AppHost -->|starts + wires| Api
+    AppHost -->|starts| UI
+    Api --> Engine
+    Api --> Infra
+    Api --> Defaults
+    Engine --> Core
+    Infra --> Core
+    Infra --> PG
+    Infra -->|at runtime| OAI
+    Infra -->|at runtime| Ollama
+    UI -->|HTTP| Api
+```
 
-### The infrastructure layer (Aspire)
+**Dependency direction:** `AppHost → Api → Engine → Core ← Infrastructure ← Api`
 
-**Orchestrator.AppHost** is the .NET Aspire orchestrator. When you run it during development, it starts a pgvector Docker container, starts the API project, wires the database connection string from the container into the API automatically, and opens the Aspire developer dashboard. This is the recommended way to run locally.
+The `Core` project has zero external dependencies — no database drivers, no HTTP clients, no AI SDKs. Everything external lives in `Infrastructure`.
 
-**Orchestrator.ServiceDefaults** is a shared library used by both the AppHost and the API. It configures OpenTelemetry (traces, metrics, and structured logs), health check endpoints, service discovery, and HTTP resilience policies. Both projects call `builder.AddServiceDefaults()` to get all of this for free.
+---
 
-### How data flows
+## Knowledge organisation
 
-A request arrives at the API. If it hits `/api/generate/*`, the guardrail middleware buffers the response before returning it. The controller calls the service. The service calls OpenAI's embedding API to convert text to a vector. The vector and the text are stored in PostgreSQL together, or the vector is used to rank existing rows by L2 distance and the top results are returned. The Semantic Kernel plugin gives an agent-friendly name and description to that search capability so a future AI agent can invoke it as a tool automatically.
+Knowledge within a tenant is structured as a three-level hierarchy:
 
-Telemetry, health checks, and retries are all handled by the ServiceDefaults library before any of your code runs.
+```mermaid
+graph TD
+    T["🏢 Tenant"]
+
+    T --> SA["📌 Shared Artifact\nCompany Knowledge\nIsShared = true"]
+    T --> D1["📂 Engineering\nsize: large"]
+    T --> D2["📂 HR\nsize: medium"]
+    T --> D3["📂 Sales\nsize: small"]
+
+    D1 --> A1["📄 Technical Standards\n12 chunks"]
+    D1 --> A2["📄 Engineering Processes\n8 chunks"]
+    D2 --> A3["📄 HR Policies\n6 chunks"]
+    D2 --> A4["📄 Recruitment\n4 chunks"]
+    D3 --> A5["📄 Sales Playbook\n9 chunks"]
+
+    SA --> C0["BusinessContext chunks..."]
+    A1 --> C1["BusinessContext chunks..."]
+    A2 --> C2["BusinessContext chunks..."]
+```
+
+- The **shared artifact** is always present and spans all departments. It captures mission, values, strategic goals, and anything that every department must work toward together.
+- Departments are sized by the AI as **small** (1 artifact), **medium** (2 artifacts), or **large** (3 artifacts). A large Engineering department splits its knowledge into focused artifacts (standards vs. processes) so each artifact stays semantically coherent.
+- Every `BusinessContext` chunk belongs to exactly one artifact, inheriting its department scope.
+
+---
+
+## Ingest flow
+
+When text is submitted to `POST /api/business-context`, the supervisor runs first:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API
+    participant Supervisor
+    participant LLM
+    participant DB
+    participant Embedder
+
+    Client->>API: POST /api/business-context\n{text, source, category}
+
+    API->>Supervisor: RouteToArtifactAsync(text, tenantId)
+    Supervisor->>DB: Load EmbeddingProviderConfig
+    Supervisor->>DB: Load all Artifacts for tenant
+
+    alt No artifacts exist yet
+        Supervisor->>DB: Create shared "Company Knowledge" artifact
+        Note over Supervisor: Bootstrap — first ingest
+    else ChatModelId is configured
+        Supervisor->>LLM: Route text to artifact\n(structured JSON prompt)
+        LLM-->>Supervisor: {action: "route", artifactId: "..."}
+        alt action = "create"
+            Supervisor->>DB: Create Department + Artifact
+        end
+    else No ChatModelId
+        Supervisor->>Supervisor: Fall back to shared artifact
+    end
+
+    Supervisor-->>API: Chosen Artifact
+
+    API->>Embedder: GenerateAsync(text)
+    Embedder-->>API: float[] vector
+
+    API->>DB: INSERT BusinessContext\n(text, vector, artifactId, tenantId)
+    API-->>Client: {id, artifactId, artifactName,\ndepartmentId, departmentName, isShared}
+```
+
+The response tells the caller exactly where the text was placed — which artifact and which department.
+
+---
+
+## Search flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API
+    participant Embedder
+    participant DB
+
+    Client->>API: GET /api/business-context/search\n?query=...&topK=5\n[&artifactId=...] [&departmentId=...]
+
+    API->>Embedder: GenerateAsync(query)
+    Embedder-->>API: float[] queryVector
+
+    alt artifactId supplied
+        API->>DB: WHERE ArtifactId = @id\nORDER BY Embedding <-> @vec\nLIMIT topK
+    else departmentId supplied
+        API->>DB: WHERE Artifact.DepartmentId = @id\nORDER BY Embedding <-> @vec\nLIMIT topK
+    else tenant-wide
+        API->>DB: WHERE TenantId = @id\nORDER BY Embedding <-> @vec\nLIMIT topK
+    end
+
+    DB-->>API: Ranked BusinessContext rows
+    API-->>Client: [{id, text, source, category,\nartifactId, artifactName, createdAt}]
+```
+
+Search is always tenant-scoped. The optional `artifactId` or `departmentId` parameters narrow the scope further, which is useful for department-specific retrieval.
+
+---
+
+## Department discovery flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Dashboard
+    participant API
+    participant Supervisor
+    participant LLM
+    participant DB
+
+    User->>Dashboard: Click "Discover Departments"
+    Dashboard->>API: POST /api/tenants/{id}/discover-departments
+
+    API->>Supervisor: DiscoverDepartmentsAsync(tenantId)
+    Supervisor->>DB: Sample up to 30 existing chunks
+
+    alt ChatModelId configured
+        Supervisor->>LLM: Identify departments + artifact count\n(structured JSON prompt)
+        LLM-->>Supervisor: {departments: [...], sharedArtifact: {...}}
+        Supervisor->>DB: Upsert Departments + Artifacts
+        Supervisor-->>API: DiscoveryResult {wasAiAssisted: true}
+    else No ChatModelId
+        Supervisor->>DB: Create "General" dept + artifact
+        Supervisor-->>API: DiscoveryResult {wasAiAssisted: false}
+    end
+
+    API-->>Dashboard: {wasAiAssisted, departments, artifacts}
+    Dashboard->>User: Shows tree + "AI-assisted: yes/no" banner
+```
+
+Discovery is idempotent — running it again skips departments and artifacts whose names already exist.
+
+---
+
+## Provider resolution
+
+```mermaid
+flowchart TD
+    A["Ingest or Search request\nfor tenantId"] --> B{"Tenant-specific\nEmbeddingProviderConfig?"}
+    B -- Yes --> D["Use tenant config"]
+    B -- No --> C{"System default\nconfig (TenantId = NULL)?"}
+    C -- Yes --> D
+    C -- No --> E["Throw: 'No embedding\nprovider configured'"]
+    D --> F{"ProviderType?"}
+    F -- OpenAI --> G["OpenAIClient\n+ EmbeddingClient\n.AsIEmbeddingGenerator()"]
+    F -- AzureOpenAI --> H["OpenAIClient (Azure endpoint)\n+ EmbeddingClient\n.AsIEmbeddingGenerator()"]
+    F -- Ollama --> I["OllamaApiClient\nimplements IEmbeddingGenerator\ndirectly"]
+    F -- None --> J["Throw: 'Configure provider\nat /api/embedding-config'"]
+    G & H & I --> K["Cache generator\nin ConcurrentDictionary"]
+    K --> L["Generate embeddings"]
+```
+
+The same provider config is used for both the **embedding model** (`ModelId`) and the **supervisor LLM** (`ChatModelId`). They share the same provider type, API key, and endpoint — only the model name differs.
+
+---
+
+## The two seeded companies
+
+The demonstration data uses two competing broadband companies to show multi-tenant isolation clearly.
+
+**FibreCore Networks** — the incumbent. 75 % market share, urban-first, premium-priced. Deliberate, committee-driven competitive response. Tenant ID: `a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1`
+
+**SwiftFibre** — the challenger. 25 % share and growing fast. At least 20 % below FibreCore on every plan, suburban and rural focus, 45-day build targets. Tenant ID: `b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2`
+
+Both tenants share the same database tables but are completely isolated: every query is filtered by `TenantId` before vector distance is computed. The integration tests explicitly verify that a search for tenant A returns nothing for tenant B.
+
+---
+
+## What works today
+
+| Capability | Status |
+|---|---|
+| Multi-tenant knowledge ingestion with supervisor routing | ✅ Working |
+| Vendor-agnostic embedding (OpenAI, Azure OpenAI, Ollama) | ✅ Working |
+| Per-tenant and system-default provider config | ✅ Working |
+| Department discovery (AI-assisted or fallback) | ✅ Working |
+| Artifact management and chunk clearing | ✅ Working |
+| Hybrid RAG search (tenant / artifact / department scoped) | ✅ Working |
+| React dashboard (all pages, settings, knowledge tree) | ✅ Working |
+| Guardrail middleware for `/api/generate/*` routes | ✅ Wired — no `/api/generate` controllers yet |
+| Semantic Kernel plugin (`BusinessContextPlugin`) | ✅ Defined — not registered in DI yet |
+| Authentication / tenant ownership verification | ❌ Not implemented — header is trusted as-is |
+| Vector index (IVFFlat / HNSW) for scale | ❌ Not configured — sequential scans at large scale |
