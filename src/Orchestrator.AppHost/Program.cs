@@ -6,13 +6,9 @@ var postgres = builder.AddPostgres("postgres")
 
 var db = postgres.AddDatabase("orchestrator");
 
-// Set via: dotnet user-secrets set "Parameters:openai-key" "sk-..." --project src/Orchestrator.AppHost
-var openAiKey = builder.AddParameter("openai-key", secret: true);
-
 var api = builder.AddProject<Projects.Orchestrator_Api>("api")
     .WithReference(db)
-    .WaitFor(db)
-    .WithEnvironment("OpenAI__ApiKey", openAiKey);
+    .WaitFor(db);
 
 builder.AddViteApp("dashboard", "../../src/dashboard")
     .WithReference(api)

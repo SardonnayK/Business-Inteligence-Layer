@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<Requirement> Requirements => Set<Requirement>();
     public DbSet<BusinessContext> BusinessContexts => Set<BusinessContext>();
+    public DbSet<EmbeddingProviderConfig> EmbeddingProviderConfigs => Set<EmbeddingProviderConfig>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,8 +38,18 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<BusinessContext>(b =>
         {
             b.HasKey(bc => bc.Id);
-            b.Property(bc => bc.Embedding).HasColumnType("vector(1536)");
+            b.Property(bc => bc.Embedding).HasColumnType("vector");
             b.HasIndex(bc => bc.TenantId);
+        });
+
+        modelBuilder.Entity<EmbeddingProviderConfig>(b =>
+        {
+            b.HasKey(e => e.Id);
+            b.Property(e => e.TenantId).IsRequired(false);
+            b.Property(e => e.ProviderType).HasConversion<int>();
+            b.Property(e => e.ModelId).IsRequired();
+            b.Property(e => e.ApiKey).IsRequired(false);
+            b.Property(e => e.Endpoint).IsRequired(false);
         });
     }
 }

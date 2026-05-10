@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orchestrator.Infrastructure.Data;
@@ -12,9 +13,11 @@ using Pgvector;
 namespace Orchestrator.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260510000001_AddEmbeddingProviderConfig")]
+    partial class AddEmbeddingProviderConfig
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -54,7 +57,7 @@ namespace Orchestrator.Infrastructure.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("BusinessContexts", (string)null);
+                    b.ToTable("BusinessContexts");
                 });
 
             modelBuilder.Entity("Orchestrator.Core.Entities.EmbeddingProviderConfig", b =>
@@ -84,7 +87,7 @@ namespace Orchestrator.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("EmbeddingProviderConfigs", (string)null);
+                    b.ToTable("EmbeddingProviderConfigs");
                 });
 
             modelBuilder.Entity("Orchestrator.Core.Entities.Project", b =>
@@ -111,7 +114,7 @@ namespace Orchestrator.Infrastructure.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("Projects", (string)null);
+                    b.ToTable("Projects");
                 });
 
             modelBuilder.Entity("Orchestrator.Core.Entities.Requirement", b =>
@@ -138,7 +141,7 @@ namespace Orchestrator.Infrastructure.Migrations
 
                     b.HasIndex("ProjectId");
 
-                    b.ToTable("Requirements", (string)null);
+                    b.ToTable("Requirements");
                 });
 
             modelBuilder.Entity("Orchestrator.Core.Entities.Tenant", b =>
@@ -159,7 +162,7 @@ namespace Orchestrator.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Tenants", (string)null);
+                    b.ToTable("Tenants");
                 });
 
             modelBuilder.Entity("Orchestrator.Core.Entities.BusinessContext", b =>
