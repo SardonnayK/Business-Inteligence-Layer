@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import DashboardPage from './pages/DashboardPage'
 import TenantsPage from './pages/TenantsPage'
 import BusinessContextPage from './pages/BusinessContextPage'
+import KnowledgePage from './pages/KnowledgePage'
 import ProjectsPage from './pages/ProjectsPage'
 import HealthPage from './pages/HealthPage'
 import SettingsPage from './pages/SettingsPage'
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/" element={<DashboardPage {...sharedProps} />} />
           <Route path="/tenants" element={<TenantsPage {...sharedProps} />} />
           <Route path="/context" element={<BusinessContextPage {...sharedProps} />} />
+          <Route path="/knowledge" element={<KnowledgePage {...sharedProps} />} />
           <Route path="/projects" element={<ProjectsPage {...sharedProps} />} />
           <Route path="/health" element={<HealthPage />} />
           <Route path="/settings" element={<SettingsPage {...sharedProps} />} />

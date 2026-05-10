@@ -9,4 +9,6 @@ public class Tenant
 
     public ICollection<Project> Projects { get; set; } = new List<Project>();
     public ICollection<BusinessContext> BusinessContexts { get; set; } = new List<BusinessContext>();
+    public ICollection<Department> Departments { get; set; } = new List<Department>();
+    public ICollection<Artifact> Artifacts { get; set; } = new List<Artifact>();
 }

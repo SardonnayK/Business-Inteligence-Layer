@@ -113,7 +113,7 @@ public class DataSeeder
         _log.LogInformation("Ingesting {Count} context chunks for {Name}...", chunks.Length, tenantName);
         foreach (var chunk in chunks)
         {
-            await _rag.IngestAsync(chunk.Text, tenantId, chunk.Source, chunk.Category, ct);
+            await _rag.IngestAsync(chunk.Text, tenantId, artifactId: null, chunk.Source, chunk.Category, ct);
             result.ContextChunksIngested++;
         }
         _log.LogInformation("Context ingestion complete for {Name}", tenantName);

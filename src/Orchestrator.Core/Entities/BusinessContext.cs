@@ -12,5 +12,8 @@ public class BusinessContext
     public string? Category { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    public Guid? ArtifactId { get; set; }
+
     public Tenant Tenant { get; set; } = null!;
+    public Artifact? Artifact { get; set; }
 }

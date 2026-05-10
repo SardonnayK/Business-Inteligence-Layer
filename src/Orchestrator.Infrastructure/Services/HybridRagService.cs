@@ -33,7 +33,8 @@ public class HybridRagService : IHybridRagService
     }
 
     public async Task<BusinessContext> IngestAsync(
-        string text, Guid tenantId, string? source = null, string? category = null, CancellationToken ct = default)
+        string text, Guid tenantId, Guid? artifactId = null,
+        string? source = null, string? category = null, CancellationToken ct = default)
     {
         var generator = await GetEmbeddingGeneratorAsync(tenantId, ct);
         var result = await generator.GenerateAsync([text], cancellationToken: ct);
@@ -45,6 +46,7 @@ public class HybridRagService : IHybridRagService
             Embedding = new Vector(result[0].Vector.ToArray()),
             Source = source,
             Category = category,
+            ArtifactId = artifactId,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -54,15 +56,27 @@ public class HybridRagService : IHybridRagService
     }
 
     public async Task<IReadOnlyList<BusinessContext>> SearchAsync(
-        string query, Guid tenantId, int topK = 5, CancellationToken ct = default)
+        string query, Guid tenantId, int topK = 5,
+        Guid? artifactId = null, Guid? departmentId = null, CancellationToken ct = default)
     {
         var generator = await GetEmbeddingGeneratorAsync(tenantId, ct);
         var result = await generator.GenerateAsync([query], cancellationToken: ct);
         var queryVector = new Vector(result[0].Vector.ToArray());
 
         // Hybrid query: relational filter (TenantId) + vector ordering (L2 distance)
-        return await _db.BusinessContexts
-            .Where(bc => bc.TenantId == tenantId)
+        var queryable = _db.BusinessContexts
+            .Where(bc => bc.TenantId == tenantId);
+
+        if (artifactId.HasValue)
+        {
+            queryable = queryable.Where(bc => bc.ArtifactId == artifactId.Value);
+        }
+        else if (departmentId.HasValue)
+        {
+            queryable = queryable.Where(bc => bc.Artifact != null && bc.Artifact.DepartmentId == departmentId.Value);
+        }
+
+        return await queryable
             .OrderBy(bc => bc.Embedding.L2Distance(queryVector))
             .Take(topK)
             .ToListAsync(ct);

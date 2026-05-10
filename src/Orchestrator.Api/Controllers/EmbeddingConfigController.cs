@@ -167,6 +167,7 @@ public class EmbeddingConfigController : ControllerBase
         config.ProviderType = (EmbeddingProviderType)request.ProviderType;
         config.ModelId = request.ModelId ?? string.Empty;
         config.Endpoint = request.Endpoint;
+        config.ChatModelId = request.ChatModelId;
         config.UpdatedAt = DateTime.UtcNow;
 
         // Only overwrite the stored key if a new one is explicitly supplied
@@ -181,6 +182,7 @@ public class EmbeddingConfigController : ControllerBase
         config.ProviderType,
         config.ModelId,
         config.Endpoint,
+        config.ChatModelId,
         hasApiKey = !string.IsNullOrEmpty(config.ApiKey),
         config.UpdatedAt,
         isDefault
@@ -191,4 +193,5 @@ public record EmbeddingConfigRequest(
     int ProviderType,
     string? ModelId,
     string? ApiKey,
-    string? Endpoint);
+    string? Endpoint,
+    string? ChatModelId);

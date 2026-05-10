@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import type { Tenant } from '../api/tenants'
 import { ingestBusinessContext, searchBusinessContext } from '../api/businessContext'
-import type { SearchResult } from '../api/businessContext'
+import type { SearchResult, IngestResponse } from '../api/businessContext'
+import { getArtifacts } from '../api/knowledge'
+import type { Artifact } from '../api/knowledge'
+import Badge from '../components/Badge'
 
 interface Props {
   tenants: Tenant[]
@@ -31,6 +34,7 @@ export default function BusinessContextPage({
   const [ingestCategory, setIngestCategory] = useState('')
   const [ingesting, setIngesting] = useState(false)
   const [ingestResult, setIngestResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [lastIngest, setLastIngest] = useState<IngestResponse | null>(null)
 
   // Search state
   const [searchTenantId, setSearchTenantId] = useState(selectedTenantId)
@@ -41,24 +45,48 @@ export default function BusinessContextPage({
   const [searchError, setSearchError] = useState<string | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
 
+  // Filter dropdowns for search
+  const [artifacts, setArtifacts] = useState<Artifact[]>([])
+  const [filterArtifactId, setFilterArtifactId] = useState('')
+  const [filterDepartmentId, setFilterDepartmentId] = useState('')
+
   useEffect(() => {
     if (selectedTenantId) {
       setIngestTenantId(selectedTenantId)
       setSearchTenantId(selectedTenantId)
+      setFilterArtifactId('')
+      setFilterDepartmentId('')
+      // Fetch artifacts for filter dropdowns
+      getArtifacts(selectedTenantId)
+        .then(setArtifacts)
+        .catch(() => setArtifacts([]))
     }
   }, [selectedTenantId])
+
+  // Derived: unique departments from artifact list
+  const departmentsFromArtifacts = (() => {
+    const seen = new Map<string, string>()
+    for (const a of artifacts) {
+      if (a.departmentId && a.departmentName && !seen.has(a.departmentId)) {
+        seen.set(a.departmentId, a.departmentName)
+      }
+    }
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }))
+  })()
 
   async function handleIngest(e: React.FormEvent) {
     e.preventDefault()
     if (!ingestTenantId) return
     setIngesting(true)
     setIngestResult(null)
+    setLastIngest(null)
     try {
       const result = await ingestBusinessContext(ingestTenantId, {
         text: ingestText,
         source: ingestSource,
         category: ingestCategory,
       })
+      setLastIngest(result)
       setIngestResult({
         ok: true,
         message: `Ingested successfully. Record ID: ${result.id}`,
@@ -83,7 +111,13 @@ export default function BusinessContextPage({
     setSearchError(null)
     setHasSearched(true)
     try {
-      const results = await searchBusinessContext(searchTenantId, searchQuery, topK)
+      const results = await searchBusinessContext(
+        searchTenantId,
+        searchQuery,
+        topK,
+        filterArtifactId || undefined,
+        filterDepartmentId || undefined,
+      )
       setSearchResults(results)
     } catch (err) {
       setSearchError(err instanceof Error ? err.message : 'Search failed.')
@@ -200,6 +234,23 @@ export default function BusinessContextPage({
               {ingestResult.message}
             </div>
           )}
+
+          {/* Routing result banner */}
+          {ingestResult?.ok && lastIngest && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+              <svg className="h-4 w-4 shrink-0 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span>Routed to:</span>
+              <span className="font-medium">{lastIngest.artifactName ?? 'Unknown artifact'}</span>
+              <span className="text-indigo-400">·</span>
+              <span>Department:</span>
+              <span className="font-medium">{lastIngest.departmentName ?? 'Shared'}</span>
+              {lastIngest.isShared && (
+                <Badge variant="info">Shared</Badge>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right: Search */}
@@ -227,6 +278,48 @@ export default function BusinessContextPage({
                 </select>
               )}
             </div>
+
+            {/* Filter by artifact */}
+            {artifacts.length > 0 && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Filter by artifact
+                </label>
+                <select
+                  value={filterArtifactId}
+                  onChange={(e) => setFilterArtifactId(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">All</option>
+                  {artifacts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Filter by department */}
+            {departmentsFromArtifacts.length > 0 && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Filter by department
+                </label>
+                <select
+                  value={filterDepartmentId}
+                  onChange={(e) => setFilterDepartmentId(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">All</option>
+                  {departmentsFromArtifacts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">

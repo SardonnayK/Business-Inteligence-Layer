@@ -15,7 +15,9 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<IEmbeddingProviderFactory, EmbeddingProviderFactory>();
+        services.AddSingleton<IChatProviderFactory, ChatProviderFactory>();
         services.AddScoped<IHybridRagService, HybridRagService>();
+        services.AddScoped<IArtifactSupervisorService, ArtifactSupervisorService>();
         services.AddScoped<IGuardrailService, GuardrailService>();
         services.AddScoped<DataSeeder>();
 

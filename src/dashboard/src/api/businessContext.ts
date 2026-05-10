@@ -9,6 +9,11 @@ export interface IngestRequest {
 export interface IngestResponse {
   id: string
   tenantId: string
+  artifactId: string | null
+  artifactName: string | null
+  departmentId: string | null
+  departmentName: string | null
+  isShared: boolean
   createdAt: string
 }
 
@@ -35,11 +40,15 @@ export function searchBusinessContext(
   tenantId: string,
   query: string,
   topK: number,
+  artifactId?: string,
+  departmentId?: string,
 ): Promise<SearchResult[]> {
   const params = new URLSearchParams({
     query,
     topK: String(topK),
   })
+  if (artifactId) params.set('artifactId', artifactId)
+  if (departmentId) params.set('departmentId', departmentId)
   return apiFetch<SearchResult[]>(`/api/business-context/search?${params}`, {
     tenantId,
   })
