@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Orchestrator.Api/Orchestrator.Api.csproj" />
+    <Project Path="src/Orchestrator.AppHost/Orchestrator.AppHost.csproj" />
+    <Project Path="src/Orchestrator.Core/Orchestrator.Core.csproj" />
+    <Project Path="src/Orchestrator.Engine/Orchestrator.Engine.csproj" />
+    <Project Path="src/Orchestrator.Infrastructure/Orchestrator.Infrastructure.csproj" />
+    <Project Path="src/Orchestrator.ServiceDefaults/Orchestrator.ServiceDefaults.csproj" />
+    <Project Path="src/Orchestrator.Tests/Orchestrator.Tests.csproj" />
+  </Folder>
+</Solution>

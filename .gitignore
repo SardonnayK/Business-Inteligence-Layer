@@ -1,0 +1,22 @@
+# Secrets
+.env
+
+# Build output
+bin/
+obj/
+
+# VS / Rider
+.vs/
+.idea/
+*.user
+
+# Logs
+*.log
+
+# Claude Code memory
+.claude/
+
+# Node
+node_modules/
+.next/
+dist/
