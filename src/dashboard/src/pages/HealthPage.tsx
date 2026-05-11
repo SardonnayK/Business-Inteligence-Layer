@@ -95,7 +95,7 @@ export default function HealthPage() {
           <p className="mt-2 text-sm text-red-700">{error}</p>
           <p className="mt-1 text-xs text-red-500">
             Make sure the API is running at{' '}
-            <code className="rounded bg-red-100 px-1">http://localhost:5000</code>
+            <code className="rounded bg-red-100 px-1">http://localhost:5210</code>
           </p>
         </div>
       )}
