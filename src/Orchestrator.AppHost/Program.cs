@@ -6,14 +6,12 @@ var postgres = builder.AddPostgres("postgres")
 
 var db = postgres.AddDatabase("orchestrator");
 
-// Docker Model Runner is built into Docker Desktop — it runs on the host at port 12434.
-// The API picks this up on startup and seeds it as the system-default provider if none is configured.
-var modelRunnerEndpoint = builder.AddParameter("ModelRunnerEndpoint", defaultValue: "http://localhost:12434", secret: false);
-
 var api = builder.AddProject<Projects.Orchestrator_Api>("api")
     .WithReference(db)
     .WaitFor(db)
-    .WithEnvironment("ModelRunner__Endpoint", modelRunnerEndpoint);
+    // Docker Model Runner (Docker Desktop 4.40+) is always on port 12434 on the host.
+    // The API seeds it as the system-default embedding/chat provider on first boot.
+    .WithEnvironment("ModelRunner__Endpoint", "http://localhost:12434");
 
 builder.AddViteApp("dashboard", "../../src/dashboard")
     .WithReference(api)
