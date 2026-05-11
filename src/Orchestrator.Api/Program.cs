@@ -7,6 +7,7 @@ using Orchestrator.Api.Middleware;
 using Orchestrator.Infrastructure;
 using Orchestrator.Infrastructure.Data;
 using Orchestrator.Infrastructure.Seeding;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -62,6 +63,7 @@ using (var scope = app.Services.CreateScope())
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.MapScalarApiReference();
 
     app.MapPost("/api/dev/seed", async (DataSeeder seeder, CancellationToken ct) =>
     {
