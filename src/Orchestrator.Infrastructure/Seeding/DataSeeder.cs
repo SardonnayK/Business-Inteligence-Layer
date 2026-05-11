@@ -28,6 +28,9 @@ public class DataSeeder
             SeedData.FibreCore.ProjectSeeds,
             SeedData.FibreCore.RequirementSeeds,
             SeedData.FibreCore.ContextChunks,
+            SeedData.FibreCore.DepartmentSeeds,
+            SeedData.FibreCore.ArtifactSeeds,
+            SeedData.FibreCore.Manifest,
             result, ct);
 
         await SeedCompanyAsync(
@@ -35,6 +38,9 @@ public class DataSeeder
             SeedData.SwiftFibre.ProjectSeeds,
             SeedData.SwiftFibre.RequirementSeeds,
             SeedData.SwiftFibre.ContextChunks,
+            SeedData.SwiftFibre.DepartmentSeeds,
+            SeedData.SwiftFibre.ArtifactSeeds,
+            SeedData.SwiftFibre.Manifest,
             result, ct);
 
         await SeedCompanyAsync(
@@ -42,6 +48,9 @@ public class DataSeeder
             SystemSeedData.ProjectSeeds,
             SystemSeedData.RequirementSeeds,
             SystemSeedData.ContextChunks,
+            departments: null,
+            SystemSeedData.ArtifactSeeds,
+            departmentManifest: null,
             result, ct);
 
         return result;
@@ -52,6 +61,9 @@ public class DataSeeder
         SeedData.ProjectSeed[] projects,
         SeedData.RequirementSeed[] requirements,
         SeedData.ContextChunkSeed[] chunks,
+        SeedData.DepartmentSeed[]? departments,
+        SeedData.ArtifactSeed[]? artifacts,
+        string? departmentManifest,
         SeedResult result,
         CancellationToken ct)
     {
@@ -66,6 +78,78 @@ public class DataSeeder
         else
         {
             _log.LogInformation("Tenant {Name} already exists — skipping", tenantName);
+        }
+
+        // ── Department Manifest ───────────────────────────────────────────────
+        if (departmentManifest is not null &&
+            !await _db.DepartmentManifests.AnyAsync(m => m.TenantId == tenantId, ct))
+        {
+            _db.DepartmentManifests.Add(new DepartmentManifest
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                Content = departmentManifest,
+                UpdatedAt = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync(ct);
+            result.ManifestsCreated++;
+            _log.LogInformation("Created department manifest for {Name}", tenantName);
+        }
+
+        // ── Departments ───────────────────────────────────────────────────────
+        if (departments is not null)
+        {
+            foreach (var d in departments)
+            {
+                if (!await _db.Departments.AnyAsync(x => x.Id == d.Id, ct))
+                {
+                    _db.Departments.Add(new Department
+                    {
+                        Id = d.Id,
+                        TenantId = d.TenantId,
+                        Name = d.Name,
+                        Description = d.Description,
+                        EstimatedSize = d.EstimatedSize
+                    });
+                    result.DepartmentsCreated++;
+                }
+            }
+            await _db.SaveChangesAsync(ct);
+        }
+
+        // ── Artifacts + Department links ──────────────────────────────────────
+        if (artifacts is not null)
+        {
+            foreach (var a in artifacts)
+            {
+                if (!await _db.Artifacts.AnyAsync(x => x.Id == a.Id, ct))
+                {
+                    _db.Artifacts.Add(new Artifact
+                    {
+                        Id = a.Id,
+                        TenantId = a.TenantId,
+                        Name = a.Name,
+                        Description = a.Description,
+                        IsShared = a.IsShared
+                    });
+                    result.ArtifactsCreated++;
+                }
+            }
+            await _db.SaveChangesAsync(ct);
+
+            foreach (var a in artifacts.Where(x => x.DepartmentId.HasValue))
+            {
+                if (!await _db.ArtifactDepartments.AnyAsync(
+                        ad => ad.ArtifactId == a.Id && ad.DepartmentId == a.DepartmentId!.Value, ct))
+                {
+                    _db.ArtifactDepartments.Add(new ArtifactDepartment
+                    {
+                        ArtifactId = a.Id,
+                        DepartmentId = a.DepartmentId!.Value
+                    });
+                }
+            }
+            await _db.SaveChangesAsync(ct);
         }
 
         // ── Projects ──────────────────────────────────────────────────────────
@@ -107,16 +191,17 @@ public class DataSeeder
         if (existingCount >= chunks.Length)
         {
             _log.LogInformation("Business context for {Name} already seeded — skipping", tenantName);
-            return;
         }
-
-        _log.LogInformation("Ingesting {Count} context chunks for {Name}...", chunks.Length, tenantName);
-        foreach (var chunk in chunks)
+        else
         {
-            await _rag.IngestAsync(chunk.Text, tenantId, artifactId: null, chunk.Source, chunk.Category, ct);
-            result.ContextChunksIngested++;
+            _log.LogInformation("Ingesting {Count} context chunks for {Name}...", chunks.Length, tenantName);
+            foreach (var chunk in chunks)
+            {
+                await _rag.IngestAsync(chunk.Text, tenantId, chunk.ArtifactId, chunk.Source, chunk.Category, ct);
+                result.ContextChunksIngested++;
+            }
+            _log.LogInformation("Context ingestion complete for {Name}", tenantName);
         }
-        _log.LogInformation("Context ingestion complete for {Name}", tenantName);
 
         // ── Admin user ────────────────────────────────────────────────────────
         if (!await _db.TenantUsers.AnyAsync(u => u.TenantId == tenantId && u.Username == "admin", ct))
@@ -139,8 +224,11 @@ public class DataSeeder
 
 public record SeedResult
 {
-    public int TenantsCreated      { get; set; }
-    public int ProjectsCreated     { get; set; }
-    public int RequirementsCreated { get; set; }
-    public int ContextChunksIngested { get; set; }
+    public int TenantsCreated         { get; set; }
+    public int ManifestsCreated       { get; set; }
+    public int DepartmentsCreated     { get; set; }
+    public int ArtifactsCreated       { get; set; }
+    public int ProjectsCreated        { get; set; }
+    public int RequirementsCreated    { get; set; }
+    public int ContextChunksIngested  { get; set; }
 }

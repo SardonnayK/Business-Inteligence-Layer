@@ -9,12 +9,80 @@ internal static class SeedData
     {
         internal static readonly Guid TenantId = new("a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1");
 
+        internal static class Departments
+        {
+            internal static readonly Guid Commercial      = new("a1a1a1a1-0000-0000-0001-000000000001");
+            internal static readonly Guid Operations      = new("a1a1a1a1-0000-0000-0001-000000000002");
+            internal static readonly Guid LegalCompliance = new("a1a1a1a1-0000-0000-0001-000000000003");
+        }
+
+        internal static class Artifacts
+        {
+            internal static readonly Guid SharedKnowledge    = new("a1a1a1a1-0000-0000-0002-000000000000");
+            internal static readonly Guid CommercialStrategy = new("a1a1a1a1-0000-0000-0002-000000000001");
+            internal static readonly Guid RolloutOperations  = new("a1a1a1a1-0000-0000-0002-000000000002");
+            internal static readonly Guid RegCompliance      = new("a1a1a1a1-0000-0000-0002-000000000003");
+        }
+
         internal static class Projects
         {
             internal static readonly Guid UrbanRollout    = new("a1a1a1a1-0000-0000-0000-000000000010");
             internal static readonly Guid EnterpriseSales = new("a1a1a1a1-0000-0000-0000-000000000020");
             internal static readonly Guid BackboneUpgrade = new("a1a1a1a1-0000-0000-0000-000000000030");
         }
+
+        internal const string Manifest =
+            """
+            ## Commercial
+            Covers pricing strategy, market positioning, enterprise and residential commercial policies, target demographics, and partner/channel arrangements.
+            Target: 1 artifact covering commercial strategy, pricing, demographics, and partnerships.
+
+            ## Operations
+            Covers network rollout phasing, deployment prioritisation, SLA commitments, and field operations.
+            Target: 1 artifact covering rollout strategy and service levels.
+
+            ## Legal & Compliance
+            Covers regulatory obligations, data governance, network security compliance, and legal frameworks.
+            Target: 1 artifact.
+
+            The shared artifact holds cross-cutting company strategy and competitive intelligence that all departments should be aware of.
+            """;
+
+        internal static readonly DepartmentSeed[] DepartmentSeeds =
+        [
+            new(Departments.Commercial, TenantId,
+                "Commercial",
+                "Pricing strategy, market positioning, enterprise and residential commercial policies, target demographics, and partner arrangements.",
+                "medium"),
+            new(Departments.Operations, TenantId,
+                "Operations",
+                "Network rollout phasing, deployment prioritisation, SLA commitments, and field operations.",
+                "medium"),
+            new(Departments.LegalCompliance, TenantId,
+                "Legal & Compliance",
+                "Regulatory obligations, data governance, network security compliance, and legal frameworks.",
+                "small"),
+        ];
+
+        internal static readonly ArtifactSeed[] ArtifactSeeds =
+        [
+            new(Artifacts.SharedKnowledge, TenantId, null,
+                "FibreCore Company Knowledge",
+                "Cross-cutting company strategy, competitive intelligence, and policies relevant to all departments.",
+                IsShared: true),
+            new(Artifacts.CommercialStrategy, TenantId, Departments.Commercial,
+                "Commercial Strategy",
+                "Residential and enterprise pricing policy, target market segmentation, and partner/channel approach.",
+                IsShared: false),
+            new(Artifacts.RolloutOperations, TenantId, Departments.Operations,
+                "Rollout & Service Levels",
+                "FTTP rollout phasing and prioritisation framework, residential and enterprise SLA terms.",
+                IsShared: false),
+            new(Artifacts.RegCompliance, TenantId, Departments.LegalCompliance,
+                "Regulatory Compliance",
+                "Regulatory engagement posture, network security obligations, and data governance policy.",
+                IsShared: false),
+        ];
 
         internal static readonly ProjectSeed[] ProjectSeeds =
         [
@@ -66,50 +134,69 @@ internal static class SeedData
 
         internal static readonly ContextChunkSeed[] ContextChunks =
         [
+            // Commercial Strategy artifact
             new("FibreCore's pricing strategy for residential FTTP is anchored to premium positioning. Our entry-tier plan is priced at a deliberate premium over legacy ADSL and cable equivalents, reflecting the superior quality of our network. We do not intend to compete on price with low-cost operators; our brand equity and network reputation are the primary value drivers.",
-                "FibreCore Internal Strategy — Residential Pricing Policy v3.2", "pricing_strategy"),
+                "FibreCore Internal Strategy — Residential Pricing Policy v3.2", "pricing_strategy",
+                Artifacts.CommercialStrategy),
 
             new("Enterprise fibre pricing follows a published rate card reviewed annually by the Pricing Committee. Custom pricing is available only for Strategic and Key accounts and requires dual approval. FibreCore does not engage in speculative discounting to win volume; margin protection is a standing commercial objective.",
-                "FibreCore Enterprise Commercial Policy v2.1", "pricing_strategy"),
+                "FibreCore Enterprise Commercial Policy v2.1", "pricing_strategy",
+                Artifacts.CommercialStrategy),
 
             new("Our primary residential target demographic is dual-income households in metropolitan areas with children under 18. These households exhibit the highest willingness to pay for reliable high-speed connectivity, the lowest churn risk, and the strongest upsell potential for bundled streaming and security products.",
-                "FibreCore Market Segmentation Report 2025", "target_demographics"),
+                "FibreCore Market Segmentation Report 2025", "target_demographics",
+                Artifacts.CommercialStrategy),
 
             new("FibreCore's enterprise target market is organisations with 50 or more employees in fixed commercial premises within our metropolitan footprint. We prioritise financial services, legal, healthcare, and government sectors, which have the highest SLA sensitivity and the least price elasticity.",
-                "FibreCore Enterprise Sales Strategy 2025–2027", "target_demographics"),
-
-            new("Our FTTP rollout is structured across four phases. Phase 1 covers the top 8 metropolitan areas and targets completion by Q4 2026. Phase 2 extends to secondary cities by Q2 2028. Suburban and rural areas fall in Phases 3 and 4 respectively, with no committed external completion dates published at this time.",
-                "FibreCore National FTTP Rollout Master Plan v1.4", "rollout_phasing"),
-
-            new("Within Phase 1 metropolitan deployments, sub-zone sequencing is determined by a scoring model factoring premises density, projected take-up rate, infrastructure reuse from existing duct assets, and estimated ARPU. High-scoring zones receive build priority regardless of geographic proximity to previously completed zones.",
-                "FibreCore Urban Deployment Prioritisation Framework", "rollout_phasing"),
-
-            new("FibreCore does not make public coverage commitments for areas where civil works have not commenced. Internal build forecasts are commercially sensitive and are not shared with third parties unless required under a formal regulatory disclosure obligation. This policy prevents premature demand signalling to competitors.",
-                "FibreCore Communications and Disclosure Policy v4.0", "rollout_phasing"),
-
-            new("Our standard residential SLA guarantees network availability of 99.9% measured monthly at the access node. Fault restoration targets are four hours for total loss of service and 24 hours for degraded service. Compensation for SLA breaches is processed as a bill credit in the following billing cycle without requiring a customer claim.",
-                "FibreCore Residential Service Level Agreement — Standard Terms", "sla_commitments"),
-
-            new("Enterprise customers on dedicated fibre circuits are eligible for our Platinum SLA, guaranteeing 99.95% monthly availability and a two-hour restoration target. SLA credits are calculated at 10% of monthly recurring charges per hour of downtime beyond the restoration target, capped at 30% of the monthly invoice.",
-                "FibreCore Enterprise SLA Schedule — Platinum Tier v2.3", "sla_commitments"),
-
-            new("FibreCore's competitive response policy is measured and deliberate. We do not engage in reactive price matching against challenger operators. When a competitor enters our market, the standard response is to reinforce our service quality narrative through targeted retention campaigns and loyalty incentives for at-risk customers.",
-                "FibreCore Competitive Response Playbook v1.1", "competitive_response"),
-
-            new("Where a new entrant demonstrates sustained market share gain of more than 5 percentage points over two consecutive quarters, a Competitive Threat Review is escalated to the Executive Committee. The Committee may authorise a localised promotional pricing programme, but such programmes must carry a defined sunset date.",
-                "FibreCore Competitive Response Playbook v1.1", "competitive_response"),
+                "FibreCore Enterprise Sales Strategy 2025–2027", "target_demographics",
+                Artifacts.CommercialStrategy),
 
             new("FibreCore's partnership approach is selective and structured. We partner with national retailers for consumer acquisition, preferred system integrators for enterprise managed services, and a small panel of civil contractors for network build. All partners must be accredited annually and meet minimum performance thresholds.",
-                "FibreCore Partner and Channel Policy v3.0", "partnership_approach"),
+                "FibreCore Partner and Channel Policy v3.0", "partnership_approach",
+                Artifacts.CommercialStrategy),
 
+            // Rollout & Service Levels artifact
+            new("Our FTTP rollout is structured across four phases. Phase 1 covers the top 8 metropolitan areas and targets completion by Q4 2026. Phase 2 extends to secondary cities by Q2 2028. Suburban and rural areas fall in Phases 3 and 4 respectively, with no committed external completion dates published at this time.",
+                "FibreCore National FTTP Rollout Master Plan v1.4", "rollout_phasing",
+                Artifacts.RolloutOperations),
+
+            new("Within Phase 1 metropolitan deployments, sub-zone sequencing is determined by a scoring model factoring premises density, projected take-up rate, infrastructure reuse from existing duct assets, and estimated ARPU. High-scoring zones receive build priority regardless of geographic proximity to previously completed zones.",
+                "FibreCore Urban Deployment Prioritisation Framework", "rollout_phasing",
+                Artifacts.RolloutOperations),
+
+            new("FibreCore does not make public coverage commitments for areas where civil works have not commenced. Internal build forecasts are commercially sensitive and are not shared with third parties unless required under a formal regulatory disclosure obligation. This policy prevents premature demand signalling to competitors.",
+                "FibreCore Communications and Disclosure Policy v4.0", "rollout_phasing",
+                Artifacts.RolloutOperations),
+
+            new("Our standard residential SLA guarantees network availability of 99.9% measured monthly at the access node. Fault restoration targets are four hours for total loss of service and 24 hours for degraded service. Compensation for SLA breaches is processed as a bill credit in the following billing cycle without requiring a customer claim.",
+                "FibreCore Residential Service Level Agreement — Standard Terms", "sla_commitments",
+                Artifacts.RolloutOperations),
+
+            new("Enterprise customers on dedicated fibre circuits are eligible for our Platinum SLA, guaranteeing 99.95% monthly availability and a two-hour restoration target. SLA credits are calculated at 10% of monthly recurring charges per hour of downtime beyond the restoration target, capped at 30% of the monthly invoice.",
+                "FibreCore Enterprise SLA Schedule — Platinum Tier v2.3", "sla_commitments",
+                Artifacts.RolloutOperations),
+
+            // Shared / cross-cutting artifact (competitive intelligence)
+            new("FibreCore's competitive response policy is measured and deliberate. We do not engage in reactive price matching against challenger operators. When a competitor enters our market, the standard response is to reinforce our service quality narrative through targeted retention campaigns and loyalty incentives for at-risk customers.",
+                "FibreCore Competitive Response Playbook v1.1", "competitive_response",
+                Artifacts.SharedKnowledge),
+
+            new("Where a new entrant demonstrates sustained market share gain of more than 5 percentage points over two consecutive quarters, a Competitive Threat Review is escalated to the Executive Committee. The Committee may authorise a localised promotional pricing programme, but such programmes must carry a defined sunset date.",
+                "FibreCore Competitive Response Playbook v1.1", "competitive_response",
+                Artifacts.SharedKnowledge),
+
+            // Regulatory Compliance artifact
             new("Our regulatory compliance stance is one of proactive engagement. FibreCore participates in all mandated open-access and structural separation consultations and meets all wholesale reference offer obligations. We comply fully with all obligations but do not volunteer concessions beyond what is required.",
-                "FibreCore Regulatory Affairs Policy and Governance Framework", "regulatory_compliance"),
+                "FibreCore Regulatory Affairs Policy and Governance Framework", "regulatory_compliance",
+                Artifacts.RegCompliance),
 
             new("All network infrastructure deployed under the FTTP programme is subject to the national Critical Infrastructure Protection framework. FibreCore conducts annual penetration testing of OLT and aggregation systems, and all vendors with access to network management interfaces must meet our Supplier Security Standard.",
-                "FibreCore Network Security and Compliance Policy v2.2", "regulatory_compliance"),
+                "FibreCore Network Security and Compliance Policy v2.2", "regulatory_compliance",
+                Artifacts.RegCompliance),
 
             new("FibreCore's data retention and privacy practices are governed by the national Data Protection Act. Customer usage data is retained for a maximum of 24 months for billing and fault resolution. We do not sell anonymised usage data to third parties. All data processing agreements with technology vendors are reviewed by Legal before execution.",
-                "FibreCore Data Governance and Privacy Policy v1.9", "regulatory_compliance"),
+                "FibreCore Data Governance and Privacy Policy v1.9", "regulatory_compliance",
+                Artifacts.RegCompliance),
         ];
     }
 
@@ -120,12 +207,90 @@ internal static class SeedData
     {
         internal static readonly Guid TenantId = new("b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2");
 
+        internal static class Departments
+        {
+            internal static readonly Guid Growth     = new("b2b2b2b2-0000-0000-0001-000000000001");
+            internal static readonly Guid Operations = new("b2b2b2b2-0000-0000-0001-000000000002");
+            internal static readonly Guid Retention  = new("b2b2b2b2-0000-0000-0001-000000000003");
+        }
+
+        internal static class Artifacts
+        {
+            internal static readonly Guid SharedMission       = new("b2b2b2b2-0000-0000-0002-000000000000");
+            internal static readonly Guid DisruptivePricing   = new("b2b2b2b2-0000-0000-0002-000000000001");
+            internal static readonly Guid CustomerAcquisition = new("b2b2b2b2-0000-0000-0002-000000000002");
+            internal static readonly Guid RolloutStandards    = new("b2b2b2b2-0000-0000-0002-000000000003");
+            internal static readonly Guid ServiceCommitments  = new("b2b2b2b2-0000-0000-0002-000000000004");
+            internal static readonly Guid CustomerRetention   = new("b2b2b2b2-0000-0000-0002-000000000005");
+        }
+
         internal static class Projects
         {
-            internal static readonly Guid SuburbanEdge      = new("b2b2b2b2-0000-0000-0000-000000000010");
-            internal static readonly Guid ZeroCapPricing    = new("b2b2b2b2-0000-0000-0000-000000000020");
-            internal static readonly Guid AcquisitionBlitz  = new("b2b2b2b2-0000-0000-0000-000000000030");
+            internal static readonly Guid SuburbanEdge     = new("b2b2b2b2-0000-0000-0000-000000000010");
+            internal static readonly Guid ZeroCapPricing   = new("b2b2b2b2-0000-0000-0000-000000000020");
+            internal static readonly Guid AcquisitionBlitz = new("b2b2b2b2-0000-0000-0000-000000000030");
         }
+
+        internal const string Manifest =
+            """
+            ## Growth
+            Covers pricing strategy, competitive positioning, and customer acquisition campaigns.
+            Target: 2 artifacts — one for disruptive pricing and market positioning, one for acquisition programmes.
+
+            ## Operations
+            Covers network rollout standards, build phasing, installation SLAs, and rural service commitments.
+            Target: 2 artifacts — one for rollout standards, one for service commitments (SLAs and rural coverage).
+
+            ## Retention
+            Covers churn reduction strategies, customer experience, loyalty programmes, and target demographics.
+            Target: 1 artifact.
+
+            The shared artifact holds the company mission and brand positioning that guides all departments.
+            """;
+
+        internal static readonly DepartmentSeed[] DepartmentSeeds =
+        [
+            new(Departments.Growth, TenantId,
+                "Growth",
+                "Pricing strategy, competitive positioning, and customer acquisition campaigns.",
+                "medium"),
+            new(Departments.Operations, TenantId,
+                "Operations",
+                "Network rollout standards, build phasing, installation SLAs, and rural service commitments.",
+                "medium"),
+            new(Departments.Retention, TenantId,
+                "Retention",
+                "Churn reduction strategies, customer experience, loyalty programmes, and target demographics.",
+                "small"),
+        ];
+
+        internal static readonly ArtifactSeed[] ArtifactSeeds =
+        [
+            new(Artifacts.SharedMission, TenantId, null,
+                "SwiftFibre Mission",
+                "Company mission, brand positioning, and the strategic rationale for challenging the incumbent.",
+                IsShared: true),
+            new(Artifacts.DisruptivePricing, TenantId, Departments.Growth,
+                "Disruptive Pricing & Positioning",
+                "ZeroCap pricing philosophy, competitive price benchmarking policy, and value-tier market strategy.",
+                IsShared: false),
+            new(Artifacts.CustomerAcquisition, TenantId, Departments.Growth,
+                "Customer Acquisition",
+                "AcquisitionBlitz campaign strategy, community ambassador programme, and digital acquisition tactics.",
+                IsShared: false),
+            new(Artifacts.RolloutStandards, TenantId, Departments.Operations,
+                "Rollout Standards",
+                "90-day sprint build methodology, suburban zone prioritisation, and permit registry monitoring.",
+                IsShared: false),
+            new(Artifacts.ServiceCommitments, TenantId, Departments.Operations,
+                "Service Commitments",
+                "Installation SLA charter, build time targets, rural coverage commitments, and performance guarantees.",
+                IsShared: false),
+            new(Artifacts.CustomerRetention, TenantId, Departments.Retention,
+                "Customer Retention",
+                "Churn reduction targets, price lock strategy, loyalty rewards, and target customer demographics.",
+                IsShared: false),
+        ];
 
         internal static readonly ProjectSeed[] ProjectSeeds =
         [
@@ -181,50 +346,71 @@ internal static class SeedData
 
         internal static readonly ContextChunkSeed[] ContextChunks =
         [
+            // Disruptive Pricing & Positioning artifact
             new("SwiftFibre is committed to being the most price-transparent broadband provider in the market. Our ZeroCap pricing philosophy means every customer sees one number: a single monthly figure that includes everything. Hidden fees are the incumbent's weapon, and transparency is ours.",
-                "SwiftFibre Internal Strategy Brief v2.4", "pricing_strategy"),
+                "SwiftFibre Internal Strategy Brief v2.4", "pricing_strategy",
+                Artifacts.DisruptivePricing),
 
             new("Our plans are priced at a minimum 20% below FibreCore's equivalent tier at all times. We review competitor pricing weekly and adjust within 48 hours if parity is detected. Being cheaper is not a race to the bottom — it is a deliberate market capture strategy while we grow our subscriber base.",
-                "SwiftFibre Internal Strategy Brief v2.4", "pricing_strategy"),
+                "SwiftFibre Internal Strategy Brief v2.4", "pricing_strategy",
+                Artifacts.DisruptivePricing),
 
+            // Shared Mission artifact (company-wide positioning)
             new("SwiftFibre exists because the dominant incumbent got comfortable. FibreCore Networks controls 75% of the market and has spent a decade prioritising urban dense zones, raising prices mid-contract, and delivering mediocre customer service. We are the alternative that customers in left-behind communities have been waiting for.",
-                "SwiftFibre Brand & Positioning Playbook", "competitive_differentiation"),
+                "SwiftFibre Brand & Positioning Playbook", "competitive_differentiation",
+                Artifacts.SharedMission),
 
             new("Our mission is to make fast, fair fibre available to every household — not just the profitable urban postcodes. Where FibreCore sees low return on investment, we see underserved customers and untapped market share. Suburban and rural expansion is not a concession; it is our core growth engine.",
-                "SwiftFibre Brand & Positioning Playbook", "competitive_differentiation"),
+                "SwiftFibre Brand & Positioning Playbook", "competitive_differentiation",
+                Artifacts.SharedMission),
 
+            // Rollout Standards artifact
             new("SwiftFibre's build phases are structured in 90-day sprints, each targeting a cluster of adjacent postcodes to maximise trench reuse and local contractor efficiency. We do not cherry-pick profitable streets — we commit to full-zone coverage or we do not enter. This all-in approach builds community trust and accelerates word-of-mouth adoption.",
-                "SwiftFibre Operations Handbook — Rollout Standards", "rollout_phasing"),
+                "SwiftFibre Operations Handbook — Rollout Standards", "rollout_phasing",
+                Artifacts.RolloutStandards),
 
             new("Our SuburbanEdge programme prioritises postcodes where FibreCore has not filed new infrastructure permits in 24 months. We monitor permit registries in all 12 target local authorities in real time. Speed of entry matters: the first quality provider in a community earns loyalty that is very hard for a late-arriving incumbent to dislodge.",
-                "SwiftFibre Operations Handbook — Rollout Standards", "rollout_phasing"),
+                "SwiftFibre Operations Handbook — Rollout Standards", "rollout_phasing",
+                Artifacts.RolloutStandards),
 
+            // Service Commitments artifact
             new("SwiftFibre guarantees a confirmed engineer installation appointment within 5 business days of contract completion for all customers in live coverage areas. This is not an aspiration — it is a published, tracked commitment. If we miss this window, the customer receives a full month's credit, no questions asked.",
-                "SwiftFibre SLA Commitment Charter", "install_time_slas"),
+                "SwiftFibre SLA Commitment Charter", "install_time_slas",
+                Artifacts.ServiceCommitments),
 
             new("Our internal build target is to take any new street cluster from permit approval to first premises live in under 45 days. Our stretch goal is 30 days. We track this metric weekly and publish it on our operations dashboard so every team member can see where we stand against target.",
-                "SwiftFibre SLA Commitment Charter", "install_time_slas"),
-
-            new("Churn is the enemy of growth. SwiftFibre targets an annual churn rate below 8%, compared to FibreCore's published 14%. Our primary churn-reduction tool is proactive service quality monitoring: we alert customers before they notice a problem and resolve faults within 4 hours of detection wherever possible.",
-                "SwiftFibre Customer Experience Strategy 2025", "churn_reduction"),
-
-            new("Our 24-month price lock is our strongest retention instrument. Customers who know their bill will not change are customers who do not shop around. We complement this with a loyalty rewards programme that activates at month 12, offering speed upgrades and referral bonuses to long-term subscribers.",
-                "SwiftFibre Customer Experience Strategy 2025", "churn_reduction"),
+                "SwiftFibre SLA Commitment Charter", "install_time_slas",
+                Artifacts.ServiceCommitments),
 
             new("SwiftFibre is committed to bringing genuine gigabit fibre to rural and semi-rural communities overlooked by larger providers. Our rural coverage commitment: any node we build in a rural area launches at a minimum of 100Mbps symmetric, with a roadmap targeting full 1Gbps symmetrical availability across all rural sites by end of 2026.",
-                "SwiftFibre Rural Coverage Commitment — Public Statement", "rural_coverage"),
+                "SwiftFibre Rural Coverage Commitment — Public Statement", "rural_coverage",
+                Artifacts.ServiceCommitments),
 
             new("We know rural customers are sceptical — they have been promised fast broadband before and let down. That is why our rural rollout includes a 90-day performance guarantee: if a rural customer does not receive at least 80% of their advertised speed during the first 90 days, they can exit with no penalty and keep the router.",
-                "SwiftFibre Rural Coverage Commitment — Public Statement", "rural_coverage"),
+                "SwiftFibre Rural Coverage Commitment — Public Statement", "rural_coverage",
+                Artifacts.ServiceCommitments),
 
-            new("SwiftFibre's AcquisitionBlitz activates in a new coverage zone the moment the first premises go live. We run digital ads, door-to-door leaflet drops, and community social media outreach simultaneously within 2km of active coverage boundaries. Early movers get a launch discount that creates urgency and seeds word-of-mouth.",
-                "SwiftFibre AcquisitionBlitz Campaign Brief", "customer_acquisition"),
+            // Customer Retention artifact
+            new("Churn is the enemy of growth. SwiftFibre targets an annual churn rate below 8%, compared to FibreCore's published 14%. Our primary churn-reduction tool is proactive service quality monitoring: we alert customers before they notice a problem and resolve faults within 4 hours of detection wherever possible.",
+                "SwiftFibre Customer Experience Strategy 2025", "churn_reduction",
+                Artifacts.CustomerRetention),
 
-            new("Our community ambassador programme is one of our most cost-efficient acquisition channels. We recruit local residents — often small business owners, community group leaders, or active social media users — to advocate for SwiftFibre in their networks. Authentic peer endorsement consistently outperforms paid advertising in new zones.",
-                "SwiftFibre AcquisitionBlitz Campaign Brief", "customer_acquisition"),
+            new("Our 24-month price lock is our strongest retention instrument. Customers who know their bill will not change are customers who do not shop around. We complement this with a loyalty rewards programme that activates at month 12, offering speed upgrades and referral bonuses to long-term subscribers.",
+                "SwiftFibre Customer Experience Strategy 2025", "churn_reduction",
+                Artifacts.CustomerRetention),
 
             new("SwiftFibre's primary target customer is the value-conscious family household in suburban or peri-urban areas, currently paying for a FibreCore plan they feel is overpriced and underperforming. Secondary targets are home-based workers and small businesses who need reliable symmetric speeds and cannot afford the incumbent's premium business tier.",
-                "SwiftFibre Target Demographics Research — Q1 2025", "target_demographics"),
+                "SwiftFibre Target Demographics Research — Q1 2025", "target_demographics",
+                Artifacts.CustomerRetention),
+
+            // Customer Acquisition artifact
+            new("SwiftFibre's AcquisitionBlitz activates in a new coverage zone the moment the first premises go live. We run digital ads, door-to-door leaflet drops, and community social media outreach simultaneously within 2km of active coverage boundaries. Early movers get a launch discount that creates urgency and seeds word-of-mouth.",
+                "SwiftFibre AcquisitionBlitz Campaign Brief", "customer_acquisition",
+                Artifacts.CustomerAcquisition),
+
+            new("Our community ambassador programme is one of our most cost-efficient acquisition channels. We recruit local residents — often small business owners, community group leaders, or active social media users — to advocate for SwiftFibre in their networks. Authentic peer endorsement consistently outperforms paid advertising in new zones.",
+                "SwiftFibre AcquisitionBlitz Campaign Brief", "customer_acquisition",
+                Artifacts.CustomerAcquisition),
         ];
     }
 
@@ -232,5 +418,7 @@ internal static class SeedData
 
     internal record ProjectSeed(Guid Id, Guid TenantId, string Name, string Description);
     internal record RequirementSeed(Guid Id, Guid ProjectId, string Content, string Status);
-    internal record ContextChunkSeed(string Text, string Source, string Category);
+    internal record ContextChunkSeed(string Text, string Source, string Category, Guid? ArtifactId = null);
+    internal record DepartmentSeed(Guid Id, Guid TenantId, string Name, string Description, string EstimatedSize);
+    internal record ArtifactSeed(Guid Id, Guid TenantId, Guid? DepartmentId, string Name, string Description, bool IsShared);
 }
