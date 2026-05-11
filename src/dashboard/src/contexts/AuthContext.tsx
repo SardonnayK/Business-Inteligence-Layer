@@ -21,7 +21,7 @@ function parseToken(token: string): AuthUser | null {
     if (exp && Date.now() / 1000 > exp) return null
     return {
       userId: payload.sub as string,
-      username: payload.name as string,
+      username: payload.username as string,
       tenantId: payload.tenant_id as string,
       role: (payload.role as string) === 'Admin' ? 'Admin' : 'Member',
     }

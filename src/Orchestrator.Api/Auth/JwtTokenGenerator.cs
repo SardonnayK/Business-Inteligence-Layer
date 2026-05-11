@@ -23,10 +23,10 @@ public sealed class JwtTokenGenerator
 
         var claims = new[]
         {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim("tenant_id", user.TenantId.ToString()),
-            new Claim(ClaimTypes.Name, user.Username),
-            new Claim(ClaimTypes.Role, user.Role.ToString())
+            new Claim("username", user.Username),
+            new Claim("role", user.Role.ToString())
         };
 
         var token = new JwtSecurityToken(
