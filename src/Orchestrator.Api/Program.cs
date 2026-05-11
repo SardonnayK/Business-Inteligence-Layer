@@ -74,7 +74,7 @@ using (var scope = app.Services.CreateScope())
                 TenantId = null,
                 ProviderType = EmbeddingProviderType.DockerModelRunner,
                 ModelId = "ai/nomic-embed-text-v1.5",
-                ChatModelId = "ai/llama3.2",
+                ChatModelId = "ai/phi4-mini",
                 Endpoint = modelRunnerEndpoint,
                 UpdatedAt = DateTime.UtcNow
             });

@@ -23,7 +23,7 @@ public class EmbeddingConfigController : ControllerBase
     [HttpGet("providers")]
     public IActionResult GetProviders()
     {
-        var providers = new[]
+        var providers = new object[]
         {
             new
             {
@@ -32,7 +32,8 @@ public class EmbeddingConfigController : ControllerBase
                 requiresApiKey = true,
                 requiresEndpoint = false,
                 defaultModel = "text-embedding-ada-002",
-                supportedModels = new[] { "text-embedding-ada-002", "text-embedding-3-small", "text-embedding-3-large" }
+                supportedModels = new[] { "text-embedding-ada-002", "text-embedding-3-small", "text-embedding-3-large" },
+                supportedChatModels = new[] { "gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1" }
             },
             new
             {
@@ -41,7 +42,8 @@ public class EmbeddingConfigController : ControllerBase
                 requiresApiKey = false,
                 requiresEndpoint = true,
                 defaultModel = "nomic-embed-text",
-                supportedModels = new[] { "nomic-embed-text", "mxbai-embed-large", "all-minilm", "bge-m3" }
+                supportedModels = new[] { "nomic-embed-text", "mxbai-embed-large", "all-minilm", "bge-m3" },
+                supportedChatModels = new[] { "phi4-mini", "llama3.2", "qwen2.5:3b", "gemma3:4b" }
             },
             new
             {
@@ -50,7 +52,8 @@ public class EmbeddingConfigController : ControllerBase
                 requiresApiKey = true,
                 requiresEndpoint = true,
                 defaultModel = "text-embedding-ada-002",
-                supportedModels = new[] { "text-embedding-ada-002", "text-embedding-3-small", "text-embedding-3-large" }
+                supportedModels = new[] { "text-embedding-ada-002", "text-embedding-3-small", "text-embedding-3-large" },
+                supportedChatModels = new[] { "gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1" }
             },
             new
             {
@@ -59,7 +62,10 @@ public class EmbeddingConfigController : ControllerBase
                 requiresApiKey = false,
                 requiresEndpoint = false,
                 defaultModel = "ai/nomic-embed-text-v1.5",
-                supportedModels = new[] { "ai/nomic-embed-text-v1.5", "ai/all-minilm-l6-v2-vllm", "ai/qwen3-embedding" }
+                // Embedding models — all small, fine for any GPU
+                supportedModels = new[] { "ai/nomic-embed-text-v1.5", "ai/all-minilm-l6-v2-vllm", "ai/qwen3-embedding" },
+                // Chat models listed smallest-first — ai/phi4-mini and ai/llama3.2 fit in 4 GB VRAM
+                supportedChatModels = new[] { "ai/phi4-mini", "ai/llama3.2", "ai/qwen3:1.7b", "ai/gemma3:4b" }
             },
             new
             {
@@ -68,7 +74,8 @@ public class EmbeddingConfigController : ControllerBase
                 requiresApiKey = false,
                 requiresEndpoint = false,
                 defaultModel = string.Empty,
-                supportedModels = Array.Empty<string>()
+                supportedModels = Array.Empty<string>(),
+                supportedChatModels = Array.Empty<string>()
             }
         };
 
