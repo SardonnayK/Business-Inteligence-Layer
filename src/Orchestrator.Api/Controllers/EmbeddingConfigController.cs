@@ -64,8 +64,8 @@ public class EmbeddingConfigController : ControllerBase
                 defaultModel = "ai/nomic-embed-text-v1.5",
                 // Embedding models — all small, fine for any GPU
                 supportedModels = new[] { "ai/nomic-embed-text-v1.5", "ai/all-minilm-l6-v2-vllm", "ai/qwen3-embedding" },
-                // Chat models listed smallest-first — ai/phi4-mini and ai/llama3.2 fit in 4 GB VRAM
-                supportedChatModels = new[] { "ai/phi4-mini", "ai/llama3.2", "ai/qwen3:1.7b", "ai/gemma3:4b" }
+                // Chat models — ai/llama3.2 (3B, ~2 GB) confirmed available; others depend on Docker Hub access
+                supportedChatModels = new[] { "ai/llama3.2", "ai/phi4-mini", "ai/qwen3:1.7b", "ai/gemma3:4b" }
             },
             new
             {
