@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Orchestrator.Api.Auth;
 using Orchestrator.Api.Middleware;
+using Orchestrator.Core.Entities;
+using Orchestrator.Core.Enums;
 using Orchestrator.Infrastructure;
 using Orchestrator.Infrastructure.Data;
 using Orchestrator.Infrastructure.Seeding;
@@ -58,6 +60,27 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+
+    // If Aspire injected a Docker Model Runner endpoint and no system default exists yet, seed one.
+    var modelRunnerEndpoint = app.Configuration["ModelRunner__Endpoint"];
+    if (modelRunnerEndpoint is not null)
+    {
+        var hasSystemConfig = await db.EmbeddingProviderConfigs.AnyAsync(c => c.TenantId == null);
+        if (!hasSystemConfig)
+        {
+            db.EmbeddingProviderConfigs.Add(new EmbeddingProviderConfig
+            {
+                Id = Guid.NewGuid(),
+                TenantId = null,
+                ProviderType = EmbeddingProviderType.DockerModelRunner,
+                ModelId = "ai/all-minilm",
+                ChatModelId = "ai/llama3.2",
+                Endpoint = modelRunnerEndpoint,
+                UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+    }
 }
 
 if (app.Environment.IsDevelopment())

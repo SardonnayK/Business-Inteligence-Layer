@@ -29,6 +29,7 @@ public sealed class ChatProviderFactory : IChatProviderFactory
             EmbeddingProviderType.OpenAI => CreateOpenAIChatClient(config),
             EmbeddingProviderType.AzureOpenAI => CreateAzureOpenAIChatClient(config),
             EmbeddingProviderType.Ollama => CreateOllamaChatClient(config),
+            EmbeddingProviderType.DockerModelRunner => CreateDockerModelRunnerChatClient(config),
             _ => throw new InvalidOperationException(
                 $"Cannot create a chat client for provider type: {config.ProviderType}.")
         };
@@ -73,6 +74,17 @@ public sealed class ChatProviderFactory : IChatProviderFactory
 
         var ollamaClient = new OllamaSharp.OllamaApiClient(new Uri(endpoint), config.ChatModelId!);
         return (IChatClient)ollamaClient;
+    }
+
+    private static IChatClient CreateDockerModelRunnerChatClient(EmbeddingProviderConfig config)
+    {
+        var host = string.IsNullOrWhiteSpace(config.Endpoint)
+            ? "http://localhost:12434"
+            : config.Endpoint.TrimEnd('/');
+
+        var options = new OpenAIClientOptions { Endpoint = new Uri($"{host}/engines/v1") };
+        var client = new OpenAIClient(new System.ClientModel.ApiKeyCredential("docker"), options);
+        return client.GetChatClient(config.ChatModelId!).AsIChatClient();
     }
 
     private static string BuildCacheKey(EmbeddingProviderConfig config)

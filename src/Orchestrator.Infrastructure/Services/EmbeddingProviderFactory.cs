@@ -26,6 +26,7 @@ public sealed class EmbeddingProviderFactory : IEmbeddingProviderFactory
             EmbeddingProviderType.OpenAI => CreateOpenAIGenerator(config),
             EmbeddingProviderType.AzureOpenAI => CreateAzureOpenAIGenerator(config),
             EmbeddingProviderType.Ollama => CreateOllamaGenerator(config),
+            EmbeddingProviderType.DockerModelRunner => CreateDockerModelRunnerGenerator(config),
             EmbeddingProviderType.None => throw new InvalidOperationException(
                 "No embedding provider configured for this tenant. " +
                 "Configure one at /api/embedding-config/system or /api/embedding-config/tenant/{id}."),
@@ -72,6 +73,17 @@ public sealed class EmbeddingProviderFactory : IEmbeddingProviderFactory
         // OllamaApiClient in v5 implements IEmbeddingGenerator<string, Embedding<float>> explicitly.
         var ollamaClient = new OllamaSharp.OllamaApiClient(new Uri(endpoint), config.ModelId);
         return (IEmbeddingGenerator<string, Embedding<float>>)ollamaClient;
+    }
+
+    private static IEmbeddingGenerator<string, Embedding<float>> CreateDockerModelRunnerGenerator(EmbeddingProviderConfig config)
+    {
+        var host = string.IsNullOrWhiteSpace(config.Endpoint)
+            ? "http://localhost:12434"
+            : config.Endpoint.TrimEnd('/');
+
+        var options = new OpenAIClientOptions { Endpoint = new Uri($"{host}/engines/v1") };
+        var client = new OpenAIClient(new System.ClientModel.ApiKeyCredential("docker"), options);
+        return client.GetEmbeddingClient(config.ModelId).AsIEmbeddingGenerator();
     }
 
     private static string BuildCacheKey(EmbeddingProviderConfig config)

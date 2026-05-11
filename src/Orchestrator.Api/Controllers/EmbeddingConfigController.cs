@@ -54,6 +54,15 @@ public class EmbeddingConfigController : ControllerBase
             },
             new
             {
+                type = "docker-model-runner",
+                name = "Docker Model Runner",
+                requiresApiKey = false,
+                requiresEndpoint = false,
+                defaultModel = "ai/all-minilm",
+                supportedModels = new[] { "ai/all-minilm", "ai/mxbai-embed-large", "ai/nomic-embed-text" }
+            },
+            new
+            {
                 type = "none",
                 name = "None",
                 requiresApiKey = false,
