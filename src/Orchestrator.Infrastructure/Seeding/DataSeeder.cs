@@ -195,12 +195,23 @@ public class DataSeeder
         else
         {
             _log.LogInformation("Ingesting {Count} context chunks for {Name}...", chunks.Length, tenantName);
-            foreach (var chunk in chunks)
+            try
             {
-                await _rag.IngestAsync(chunk.Text, tenantId, chunk.ArtifactId, chunk.Source, chunk.Category, ct);
-                result.ContextChunksIngested++;
+                foreach (var chunk in chunks)
+                {
+                    await _rag.IngestAsync(chunk.Text, tenantId, chunk.ArtifactId, chunk.Source, chunk.Category, ct);
+                    result.ContextChunksIngested++;
+                }
+                _log.LogInformation("Context ingestion complete for {Name}", tenantName);
             }
-            _log.LogInformation("Context ingestion complete for {Name}", tenantName);
+            catch (InvalidOperationException ex) when (ex.Message.Contains("embedding provider"))
+            {
+                _log.LogWarning(
+                    "Skipped embedding ingestion for {Name} — no embedding provider configured. " +
+                    "Configure one at PUT /api/embedding-config/system then re-run seed.",
+                    tenantName);
+                result.ChunksSkippedNoProvider += chunks.Length - result.ContextChunksIngested;
+            }
         }
 
         // ── Admin user ────────────────────────────────────────────────────────
@@ -224,11 +235,12 @@ public class DataSeeder
 
 public record SeedResult
 {
-    public int TenantsCreated         { get; set; }
-    public int ManifestsCreated       { get; set; }
-    public int DepartmentsCreated     { get; set; }
-    public int ArtifactsCreated       { get; set; }
-    public int ProjectsCreated        { get; set; }
-    public int RequirementsCreated    { get; set; }
-    public int ContextChunksIngested  { get; set; }
+    public int TenantsCreated            { get; set; }
+    public int ManifestsCreated          { get; set; }
+    public int DepartmentsCreated        { get; set; }
+    public int ArtifactsCreated          { get; set; }
+    public int ProjectsCreated           { get; set; }
+    public int RequirementsCreated       { get; set; }
+    public int ContextChunksIngested     { get; set; }
+    public int ChunksSkippedNoProvider   { get; set; }
 }
