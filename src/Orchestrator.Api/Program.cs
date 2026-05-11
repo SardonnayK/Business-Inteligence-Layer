@@ -62,7 +62,8 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
 
     // If Aspire injected a Docker Model Runner endpoint and no system default exists yet, seed one.
-    var modelRunnerEndpoint = app.Configuration["ModelRunner__Endpoint"];
+    // Aspire injects env vars with __ separators; .NET config normalises them to : so read with colon.
+    var modelRunnerEndpoint = app.Configuration["ModelRunner:Endpoint"];
     if (modelRunnerEndpoint is not null)
     {
         var hasSystemConfig = await db.EmbeddingProviderConfigs.AnyAsync(c => c.TenantId == null);
