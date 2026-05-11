@@ -13,8 +13,11 @@ obj/
 # Logs
 *.log
 
-# Claude Code memory
-.claude/
+# Claude Code memory (local only — exclude contents, allow shared commands)
+.claude/*
+!.claude/commands
+.claude/commands/*
+!.claude/commands/*.md
 
 # Node
 node_modules/
