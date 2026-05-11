@@ -9,11 +9,15 @@ export interface Department {
   artifactCount: number
 }
 
+export interface ArtifactDepartment {
+  id: string
+  name: string
+}
+
 export interface Artifact {
   id: string
   tenantId: string
-  departmentId: string | null
-  departmentName: string | null
+  departments: ArtifactDepartment[]
   name: string
   description: string
   isShared: boolean

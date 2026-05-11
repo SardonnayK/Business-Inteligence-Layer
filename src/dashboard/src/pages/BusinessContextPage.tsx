@@ -67,8 +67,8 @@ export default function BusinessContextPage({
   const departmentsFromArtifacts = (() => {
     const seen = new Map<string, string>()
     for (const a of artifacts) {
-      if (a.departmentId && a.departmentName && !seen.has(a.departmentId)) {
-        seen.set(a.departmentId, a.departmentName)
+      for (const d of a.departments) {
+        if (!seen.has(d.id)) seen.set(d.id, d.name)
       }
     }
     return Array.from(seen.entries()).map(([id, name]) => ({ id, name }))
@@ -245,7 +245,7 @@ export default function BusinessContextPage({
               <span className="font-medium">{lastIngest.artifactName ?? 'Unknown artifact'}</span>
               <span className="text-indigo-400">·</span>
               <span>Department:</span>
-              <span className="font-medium">{lastIngest.departmentName ?? 'Shared'}</span>
+              <span className="font-medium">{lastIngest.departments[0]?.name ?? 'Shared'}</span>
               {lastIngest.isShared && (
                 <Badge variant="info">Shared</Badge>
               )}

@@ -249,10 +249,10 @@ export default function KnowledgePage({
   const sharedArtifacts = artifacts.filter((a) => a.isShared)
   const unsharedArtifacts = artifacts.filter((a) => !a.isShared)
 
-  // Group non-shared artifacts by departmentId
+  // Group non-shared artifacts by first department id (an artifact may belong to many)
   const artifactsByDept = new Map<string | null, Artifact[]>()
   for (const art of unsharedArtifacts) {
-    const key = art.departmentId ?? null
+    const key = art.departments[0]?.id ?? null
     if (!artifactsByDept.has(key)) artifactsByDept.set(key, [])
     artifactsByDept.get(key)!.push(art)
   }
@@ -396,12 +396,9 @@ export default function KnowledgePage({
             )
           })}
 
-          {/* Artifacts not belonging to any department (non-shared, null departmentId, not in departments list) */}
+          {/* Artifacts not belonging to any department (non-shared, no departments array entries) */}
           {(() => {
-            const departmentIds = new Set(departments.map((d) => d.id))
-            const orphaned = unsharedArtifacts.filter(
-              (a) => a.departmentId === null || !departmentIds.has(a.departmentId),
-            )
+            const orphaned = unsharedArtifacts.filter((a) => a.departments.length === 0)
             // Remove ones already rendered under their dept
             const renderedIds = new Set(
               departments.flatMap((d) => (artifactsByDept.get(d.id) ?? []).map((a) => a.id)),

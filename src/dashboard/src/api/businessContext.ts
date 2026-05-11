@@ -11,8 +11,7 @@ export interface IngestResponse {
   tenantId: string
   artifactId: string | null
   artifactName: string | null
-  departmentId: string | null
-  departmentName: string | null
+  departments: Array<{ id: string; name: string }>
   isShared: boolean
   createdAt: string
 }
