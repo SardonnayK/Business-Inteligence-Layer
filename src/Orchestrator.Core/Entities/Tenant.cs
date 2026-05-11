@@ -12,4 +12,5 @@ public class Tenant
     public ICollection<Department> Departments { get; set; } = new List<Department>();
     public ICollection<Artifact> Artifacts { get; set; } = new List<Artifact>();
     public ICollection<TenantUser> Users { get; set; } = new List<TenantUser>();
+    public DepartmentManifest? DepartmentManifest { get; set; }
 }

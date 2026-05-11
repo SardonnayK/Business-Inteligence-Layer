@@ -54,8 +54,7 @@ public class BusinessContextController : ControllerBase
             result.TenantId,
             artifactId = artifact.Id,
             artifactName = artifact.Name,
-            departmentId = artifact.DepartmentId,
-            departmentName = artifact.Department?.Name,
+            departments = artifact.ArtifactDepartments.Select(ad => new { id = ad.DepartmentId, name = ad.Department?.Name }),
             isShared = artifact.IsShared,
             result.CreatedAt
         });

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Orchestrator.Core.Entities;
 using Orchestrator.Core.Enums;
 using Orchestrator.Core.Interfaces;
 using Orchestrator.Infrastructure.Data;
@@ -40,7 +41,7 @@ public class ArtifactController : ControllerBase
 
         var query = _db.Artifacts
             .AsNoTracking()
-            .Include(a => a.Department)
+            .Include(a => a.ArtifactDepartments).ThenInclude(ad => ad.Department)
             .Where(a => a.TenantId == tenantId);
 
         if (readableIds is not null)
@@ -53,8 +54,7 @@ public class ArtifactController : ControllerBase
                 a.Name,
                 a.Description,
                 a.IsShared,
-                a.DepartmentId,
-                departmentName = a.Department != null ? a.Department.Name : null,
+                departments = a.ArtifactDepartments.Select(ad => new { id = ad.DepartmentId, name = ad.Department != null ? ad.Department.Name : null }),
                 a.CreatedAt,
                 a.UpdatedAt,
                 chunkCount = _db.BusinessContexts.Count(bc => bc.ArtifactId == a.Id)
@@ -121,5 +121,62 @@ public class ArtifactController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         return Ok(new { deletedCount });
+    }
+
+    /// <summary>Link a department to an artifact. Admin only.</summary>
+    [HttpPost("{id:guid}/departments/{departmentId:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> LinkDepartment(Guid id, Guid departmentId, CancellationToken ct)
+    {
+        var tenantId = GetTenantId();
+
+        var artifact = await _db.Artifacts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == tenantId, ct);
+
+        if (artifact is null)
+            return NotFound(new { message = $"Artifact '{id}' not found for this tenant." });
+
+        var department = await _db.Departments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == departmentId && d.TenantId == tenantId, ct);
+
+        if (department is null)
+            return NotFound(new { message = $"Department '{departmentId}' not found for this tenant." });
+
+        var exists = await _db.ArtifactDepartments
+            .AnyAsync(ad => ad.ArtifactId == id && ad.DepartmentId == departmentId, ct);
+
+        if (exists)
+            return Conflict(new { message = "This artifact is already linked to this department." });
+
+        _db.ArtifactDepartments.Add(new ArtifactDepartment
+        {
+            ArtifactId = id,
+            DepartmentId = departmentId
+        });
+
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new { artifactId = id, departmentId });
+    }
+
+    /// <summary>Unlink a department from an artifact. Admin only.</summary>
+    [HttpDelete("{id:guid}/departments/{departmentId:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UnlinkDepartment(Guid id, Guid departmentId, CancellationToken ct)
+    {
+        var tenantId = GetTenantId();
+
+        var link = await _db.ArtifactDepartments
+            .FirstOrDefaultAsync(ad => ad.ArtifactId == id && ad.DepartmentId == departmentId, ct);
+
+        if (link is null)
+            return NotFound(new { message = "No link found between this artifact and department." });
+
+        _db.ArtifactDepartments.Remove(link);
+        await _db.SaveChangesAsync(ct);
+
+        return NoContent();
     }
 }

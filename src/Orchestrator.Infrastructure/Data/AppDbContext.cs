@@ -16,6 +16,8 @@ public class AppDbContext : DbContext
     public DbSet<Artifact> Artifacts => Set<Artifact>();
     public DbSet<TenantUser> TenantUsers => Set<TenantUser>();
     public DbSet<ArtifactPermission> ArtifactPermissions => Set<ArtifactPermission>();
+    public DbSet<ArtifactDepartment> ArtifactDepartments => Set<ArtifactDepartment>();
+    public DbSet<DepartmentManifest> DepartmentManifests => Set<DepartmentManifest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -65,7 +67,6 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Department>(b =>
         {
             b.HasKey(d => d.Id);
-            b.HasMany(d => d.Artifacts).WithOne(a => a.Department).HasForeignKey(a => a.DepartmentId).IsRequired(false);
             b.HasIndex(d => d.TenantId);
         });
 
@@ -75,7 +76,20 @@ public class AppDbContext : DbContext
             b.HasMany(a => a.BusinessContexts).WithOne(bc => bc.Artifact).HasForeignKey(bc => bc.ArtifactId).IsRequired(false);
             b.HasMany(a => a.Permissions).WithOne(ap => ap.Artifact).HasForeignKey(ap => ap.ArtifactId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(a => a.TenantId);
-            b.HasIndex(a => a.DepartmentId);
+        });
+
+        modelBuilder.Entity<ArtifactDepartment>(b =>
+        {
+            b.HasKey(ad => new { ad.ArtifactId, ad.DepartmentId });
+            b.HasOne(ad => ad.Artifact).WithMany(a => a.ArtifactDepartments).HasForeignKey(ad => ad.ArtifactId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(ad => ad.Department).WithMany(d => d.ArtifactDepartments).HasForeignKey(ad => ad.DepartmentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DepartmentManifest>(b =>
+        {
+            b.HasKey(dm => dm.Id);
+            b.HasOne(dm => dm.Tenant).WithOne(t => t.DepartmentManifest).HasForeignKey<DepartmentManifest>(dm => dm.TenantId);
+            b.HasIndex(dm => dm.TenantId).IsUnique();
         });
 
         modelBuilder.Entity<TenantUser>(b =>

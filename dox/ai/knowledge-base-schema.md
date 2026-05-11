@@ -7,14 +7,16 @@
 
 ```
 Tenant
+├── DepartmentManifest (optional)   ← free-text guidance for the AI supervisor
 ├── Artifact [IsShared=true]        ← always present; no department owner
 │   └── BusinessContext chunks
 └── Department
-    └── Artifact [IsShared=false]   ← 1–3 per department
-        └── BusinessContext chunks
+    └── ArtifactDepartment          ← join table; one Artifact may link to many Departments
+        └── Artifact [IsShared=false]
+            └── BusinessContext chunks
 ```
 
-Every `BusinessContext` chunk belongs to exactly one `Artifact`. Every `Artifact` belongs to exactly one `Tenant`, and optionally one `Department`.
+Every `BusinessContext` chunk belongs to exactly one `Artifact`. Every `Artifact` belongs to exactly one `Tenant`. Department membership is many-to-many: an artifact may be linked to one or more departments via the `ArtifactDepartment` join table, or to none (shared artifact).
 
 ---
 
@@ -43,18 +45,32 @@ Table: `BusinessContexts`
 
 Table: `Artifacts`
 
-| Field        | C# Type  | DB Type     | Nullable | Notes                         |
-|--------------|----------|-------------|----------|-------------------------------|
-| Id           | Guid     | uuid        | NO       | PK                            |
-| TenantId     | Guid     | uuid        | NO       | FK → Tenants.Id               |
-| DepartmentId | Guid?    | uuid        | YES      | FK → Departments.Id; null = shared |
-| Name         | string   | text        | NO       | Document/scope title          |
-| Description  | string   | text        | NO       | What knowledge this contains  |
-| IsShared     | bool     | boolean     | NO       | true = cross-cutting artifact |
-| CreatedAt    | DateTime | timestamptz | NO       |                               |
-| UpdatedAt    | DateTime | timestamptz | NO       |                               |
+| Field       | C# Type  | DB Type     | Nullable | Notes                         |
+|-------------|----------|-------------|----------|-------------------------------|
+| Id          | Guid     | uuid        | NO       | PK                            |
+| TenantId    | Guid     | uuid        | NO       | FK → Tenants.Id               |
+| Name        | string   | text        | NO       | Document/scope title          |
+| Description | string   | text        | NO       | What knowledge this contains  |
+| IsShared    | bool     | boolean     | NO       | true = cross-cutting artifact |
+| CreatedAt   | DateTime | timestamptz | NO       |                               |
+| UpdatedAt   | DateTime | timestamptz | NO       |                               |
 
-**Shared artifact invariant:** Every tenant has exactly one artifact where `IsShared = true` and `DepartmentId = null`. Created automatically on first ingest if no artifacts exist.
+Department membership is stored in the `ArtifactDepartments` join table (see below). API responses expose this as `departments: [{id, name}]`.
+
+**Shared artifact invariant:** Every tenant has exactly one artifact where `IsShared = true`. Created automatically on first ingest if no artifacts exist. The shared artifact has no rows in `ArtifactDepartments`.
+
+---
+
+## ArtifactDepartment — Schema
+
+Table: `ArtifactDepartments`
+
+| Field        | C# Type | DB Type | Nullable | Notes                                 |
+|--------------|---------|---------|----------|---------------------------------------|
+| ArtifactId   | Guid    | uuid    | NO       | PK (composite); FK → Artifacts.Id    |
+| DepartmentId | Guid    | uuid    | NO       | PK (composite); FK → Departments.Id  |
+
+The composite PK prevents duplicate links. Cascade deletes remove join rows when either the artifact or department is deleted.
 
 ---
 
@@ -68,13 +84,25 @@ Table: `Departments`
 | TenantId      | Guid     | uuid        | NO       | FK → Tenants.Id                    |
 | Name          | string   | text        | NO       | e.g. "Engineering", "HR"           |
 | Description   | string   | text        | NO       | What this department's knowledge covers |
-| EstimatedSize | string   | text        | NO       | "small" | "medium" | "large"      |
+| EstimatedSize | string   | text        | NO       | `"small"`, `"medium"`, or `"large"` |
 | CreatedAt     | DateTime | timestamptz | NO       |                                    |
 
-Size → artifact count mapping:
-- `"small"` → 1 artifact
-- `"medium"` → 2 artifacts
-- `"large"` → 3 artifacts
+`EstimatedSize` is a hint set by the AI supervisor at discovery time. There is no hardcoded artifact count per size level. When the tenant has a `DepartmentManifest`, the supervisor uses its guidance to determine how many artifacts to create. When no manifest exists, the supervisor uses its own judgement based on content volume and semantic coherence.
+
+---
+
+## DepartmentManifest — Schema
+
+Table: `DepartmentManifests`
+
+| Field     | C# Type  | DB Type     | Nullable | Notes                              |
+|-----------|----------|-------------|----------|------------------------------------|
+| Id        | Guid     | uuid        | NO       | PK                                 |
+| TenantId  | Guid     | uuid        | NO       | FK → Tenants.Id; UNIQUE            |
+| Content   | string   | text        | NO       | Free-text blob; Markdown recommended |
+| UpdatedAt | DateTime | timestamptz | NO       | Updated on every PUT               |
+
+The manifest is read by the AI supervisor on every `RouteToArtifactAsync` and `DiscoverDepartmentsAsync` call. It describes the tenant's intended department structure and may include routing rules (e.g. "SLA content → Engineering unless commercial"). When absent the supervisor relies solely on the artifact catalog.
 
 ---
 
@@ -106,14 +134,13 @@ Constraints:
 Successful response `200 OK`:
 ```json
 {
-  "id":             "<uuid>",
-  "tenantId":       "<uuid>",
-  "artifactId":     "<uuid | null>",
-  "artifactName":   "<string | null>",
-  "departmentId":   "<uuid | null>",
-  "departmentName": "<string | null>",
-  "isShared":       true | false,
-  "createdAt":      "<ISO 8601 UTC>"
+  "id":           "<uuid>",
+  "tenantId":     "<uuid>",
+  "artifactId":   "<uuid | null>",
+  "artifactName": "<string | null>",
+  "departments":  [{ "id": "<uuid>", "name": "<string>" }],
+  "isShared":     true | false,
+  "createdAt":    "<ISO 8601 UTC>"
 }
 ```
 
@@ -268,14 +295,47 @@ GET /api/artifacts/{artifactId}/contexts
 DELETE /api/artifacts/{artifactId}/contexts
 → 204 No Content
 ```
-Artifact structure (name, description, department assignment) is preserved. Only `BusinessContext` rows are deleted.
+Artifact structure (name, description, department memberships) is preserved. Only `BusinessContext` rows are deleted.
+
+### Add department membership to an artifact
+```
+POST /api/artifacts/{artifactId}/departments/{departmentId}
+→ 204 No Content
+```
+Inserts a row into `ArtifactDepartments`. Idempotent.
+
+### Remove department membership from an artifact
+```
+DELETE /api/artifacts/{artifactId}/departments/{departmentId}
+→ 204 No Content
+```
+Removes the `ArtifactDepartments` row. Artifact and department are not deleted.
+
+### Get department manifest
+```
+GET /api/tenants/{tenantId}/department-manifest
+→ { tenantId, content, updatedAt }  or 404
+```
+
+### Set department manifest
+```
+PUT /api/tenants/{tenantId}/department-manifest
+Body: { "content": "<Markdown string>" }
+→ { tenantId, content, updatedAt }
+```
+
+### Delete department manifest
+```
+DELETE /api/tenants/{tenantId}/department-manifest
+→ 204 No Content
+```
 
 ### Run department discovery
 ```
 POST /api/tenants/{tenantId}/discover-departments
 → { wasAiAssisted: bool, departments: [...], artifacts: [...] }
 ```
-Idempotent — safe to run multiple times. Skips departments/artifacts whose names already exist.
+Idempotent — safe to run multiple times. Skips departments/artifacts whose names already exist. Reads the `DepartmentManifest` if present.
 
 ---
 

@@ -16,7 +16,9 @@ Multi-tenant hybrid RAG API for business context storage and retrieval. Stores t
 - `GET /api/business-context/search` — hybrid vector+relational search with optional artifact/department scope
 - `POST /api/dev/seed` — idempotent seed of both tenants (Development env only)
 - `GET /api/departments`, `POST /api/tenants/{id}/discover-departments` — department management + AI discovery
+- `GET/PUT/DELETE /api/tenants/{id}/department-manifest` — per-tenant supervisor guidance blob
 - `GET /api/artifacts`, `GET /api/artifacts/{id}/contexts`, `DELETE /api/artifacts/{id}/contexts` — artifact management
+- `POST/DELETE /api/artifacts/{id}/departments/{departmentId}` — artifact-to-department membership management
 - `PUT/GET /api/embedding-config/system` — system-wide default provider config
 - `PUT/GET/DELETE /api/embedding-config/tenant/{id}` — per-tenant provider config override
 - `GET /api/embedding-config/providers` — list of provider types with metadata
@@ -131,14 +133,13 @@ Request body:
 Response `200 OK`:
 ```json
 {
-  "id":             "uuid",
-  "tenantId":       "uuid",
-  "artifactId":     "uuid | null",
-  "artifactName":   "string | null",
-  "departmentId":   "uuid | null",
-  "departmentName": "string | null",
-  "isShared":       true | false,
-  "createdAt":      "ISO 8601 UTC"
+  "id":           "uuid",
+  "tenantId":     "uuid",
+  "artifactId":   "uuid | null",
+  "artifactName": "string | null",
+  "departments":  [{ "id": "uuid", "name": "string" }],
+  "isShared":     true | false,
+  "createdAt":    "ISO 8601 UTC"
 }
 ```
 
@@ -188,7 +189,11 @@ Query internals:
 ```sql
 WHERE TenantId = @tenantId
   [AND ArtifactId = @artifactId]
-  [AND Artifact.DepartmentId = @departmentId]
+  [AND EXISTS (
+      SELECT 1 FROM ArtifactDepartments ad
+      WHERE ad.ArtifactId = BusinessContexts.ArtifactId
+        AND ad.DepartmentId = @departmentId
+  )]
 ORDER BY Embedding <-> @queryVector
 LIMIT topK
 ```
@@ -248,14 +253,13 @@ Response `200 OK`:
 ```json
 [
   {
-    "id":             "uuid",
-    "name":           "string",
-    "description":    "string",
-    "isShared":       true | false,
-    "departmentId":   "uuid | null",
-    "departmentName": "string | null",
-    "chunkCount":     12,
-    "createdAt":      "ISO 8601"
+    "id":          "uuid",
+    "name":        "string",
+    "description": "string",
+    "isShared":    true | false,
+    "departments": [{ "id": "uuid", "name": "string" }],
+    "chunkCount":  12,
+    "createdAt":   "ISO 8601"
   }
 ]
 ```
@@ -272,6 +276,57 @@ Response `200 OK`: array of `{ id, text, source, category, createdAt }`.
 
 ### DELETE /api/artifacts/{id}/contexts
 **Purpose:** Clear all chunks from an artifact (for re-ingestion). Artifact is not deleted.
+**Response:** `204 No Content`
+
+---
+
+### POST /api/artifacts/{id}/departments/{departmentId}
+**Purpose:** Add a department membership to an artifact (insert into `ArtifactDepartments`). Idempotent.
+**Auth:** None
+**Body:** none
+**Response:** `204 No Content`
+
+---
+
+### DELETE /api/artifacts/{id}/departments/{departmentId}
+**Purpose:** Remove a department membership from an artifact. Artifact and department are not deleted.
+**Auth:** None
+**Response:** `204 No Content`
+
+---
+
+### GET /api/tenants/{id}/department-manifest
+**Purpose:** Retrieve the free-text supervisor guidance manifest for a tenant.
+**Auth:** None
+
+Response `200 OK`:
+```json
+{
+  "tenantId":  "uuid",
+  "content":   "string (Markdown)",
+  "updatedAt": "ISO 8601"
+}
+```
+Returns `404` if no manifest has been set.
+
+---
+
+### PUT /api/tenants/{id}/department-manifest
+**Purpose:** Create or replace the department manifest for a tenant.
+**Auth:** None
+**Content-Type:** `application/json`
+
+Request body:
+```json
+{ "content": "string (required)" }
+```
+
+Response `200 OK`: same shape as GET response.
+
+---
+
+### DELETE /api/tenants/{id}/department-manifest
+**Purpose:** Remove the department manifest. Supervisor falls back to artifact catalog only.
 **Response:** `204 No Content`
 
 ---
@@ -320,7 +375,7 @@ LLM prompt returns one of:
 {"action":"shared"}
 ```
 
-On `"create"`: creates a new `Department` (size `"small"`) and a new `Artifact` with `DepartmentId` set; returns that artifact.
+On `"create"`: creates a new `Department` (size `"small"`) and a new `Artifact`, then creates an `ArtifactDepartment` link between them; returns that artifact.
 On `"shared"` or any parse error: returns the tenant's shared artifact.
 On any LLM exception: catches, falls back to shared artifact (no crash).
 
@@ -330,8 +385,9 @@ Called on `POST /api/tenants/{id}/discover-departments`.
 
 Flow:
 1. Sample up to 30 `BusinessContext` chunks (random selection using `NEWID()` order).
-2. If no `ChatModelId`: create `"General"` department + 1 artifact; return `WasAiAssisted: false`.
-3. Otherwise: send texts to LLM; prompt returns:
+2. Load `DepartmentManifest` for the tenant (may be null).
+3. If no `ChatModelId`: create `"General"` department + 1 artifact; return `WasAiAssisted: false`.
+4. Otherwise: send texts (and manifest content if present) to LLM; prompt returns:
 ```json
 {
   "departments": [
@@ -349,9 +405,11 @@ Flow:
   "sharedArtifact": {"name":"Company Knowledge","description":"..."}
 }
 ```
-4. Upsert each department (skip if name already exists for tenant).
-5. Upsert each artifact within that department (skip if name already exists for that department).
-6. Upsert shared artifact (skip if `IsShared = true` artifact already exists for tenant).
+The number of artifacts per department is determined by the LLM based on content and manifest guidance — there is no hardcoded size-to-count mapping.
+
+5. Upsert each department (skip if name already exists for tenant).
+6. Upsert each artifact within that department (skip if name already exists for that department); create `ArtifactDepartment` links.
+7. Upsert shared artifact (skip if `IsShared = true` artifact already exists for tenant).
 
 ---
 
@@ -404,16 +462,29 @@ Provider implementations:
 | CreatedAt     | timestamptz | NO       | default UtcNow |
 
 ### Table: Artifacts
-| Column       | Type        | Nullable | Constraints          |
-|--------------|-------------|----------|----------------------|
-| Id           | uuid        | NO       | PK                   |
-| TenantId     | uuid        | NO       | FK → Tenants         |
-| DepartmentId | uuid        | YES      | FK → Departments     |
-| Name         | text        | NO       | default ''           |
-| Description  | text        | NO       | default ''           |
-| IsShared     | boolean     | NO       | default false        |
-| CreatedAt    | timestamptz | NO       | default UtcNow       |
-| UpdatedAt    | timestamptz | NO       | default UtcNow       |
+| Column      | Type        | Nullable | Constraints    |
+|-------------|-------------|----------|----------------|
+| Id          | uuid        | NO       | PK             |
+| TenantId    | uuid        | NO       | FK → Tenants   |
+| Name        | text        | NO       | default ''     |
+| Description | text        | NO       | default ''     |
+| IsShared    | boolean     | NO       | default false  |
+| CreatedAt   | timestamptz | NO       | default UtcNow |
+| UpdatedAt   | timestamptz | NO       | default UtcNow |
+
+### Table: ArtifactDepartments
+| Column       | Type | Nullable | Constraints                        |
+|--------------|------|----------|------------------------------------|
+| ArtifactId   | uuid | NO       | PK (composite); FK → Artifacts     |
+| DepartmentId | uuid | NO       | PK (composite); FK → Departments   |
+
+### Table: DepartmentManifests
+| Column    | Type        | Nullable | Constraints                              |
+|-----------|-------------|----------|------------------------------------------|
+| Id        | uuid        | NO       | PK                                       |
+| TenantId  | uuid        | NO       | FK → Tenants; UNIQUE                     |
+| Content   | text        | NO       | Free-text guidance blob (Markdown)       |
+| UpdatedAt | timestamptz | NO       | default UtcNow                           |
 
 ### Table: BusinessContexts
 | Column     | Type        | Nullable | Constraints              |

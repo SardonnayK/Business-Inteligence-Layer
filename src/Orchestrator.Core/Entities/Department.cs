@@ -9,5 +9,5 @@ public class Department
     public string EstimatedSize { get; set; } = "unknown"; // "small" | "medium" | "large"
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public Tenant Tenant { get; set; } = null!;
-    public ICollection<Artifact> Artifacts { get; set; } = new List<Artifact>();
+    public ICollection<ArtifactDepartment> ArtifactDepartments { get; set; } = new List<ArtifactDepartment>();
 }

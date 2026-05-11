@@ -73,7 +73,7 @@ public class HybridRagService : IHybridRagService
         }
         else if (departmentId.HasValue)
         {
-            queryable = queryable.Where(bc => bc.Artifact != null && bc.Artifact.DepartmentId == departmentId.Value);
+            queryable = queryable.Where(bc => bc.Artifact != null && bc.Artifact.ArtifactDepartments.Any(ad => ad.DepartmentId == departmentId.Value));
         }
 
         return await queryable

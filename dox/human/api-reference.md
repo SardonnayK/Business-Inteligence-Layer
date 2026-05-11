@@ -151,14 +151,15 @@ curl -s -X POST \
   "tenantId": "a1a1a1a1-...",
   "artifactId": "e5d3c2b1-...",
   "artifactName": "Competitive Strategy",
-  "departmentId": "f9a8b7c6-...",
-  "departmentName": "Sales",
+  "departments": [
+    { "id": "f9a8b7c6-...", "name": "Sales" }
+  ],
   "isShared": false,
   "createdAt": "2026-05-10T09:14:22.341Z"
 }
 ```
 
-When `isShared` is `true`, the chunk was routed to the company-wide shared artifact; `departmentId` and `departmentName` will be null.
+When `isShared` is `true`, the chunk was routed to the company-wide shared artifact; `departments` will be an empty array.
 
 **Notes**
 - The AI supervisor runs before embedding. If no `ChatModelId` is configured, the chunk goes to the shared artifact automatically.
@@ -263,12 +264,71 @@ Trigger AI-assisted department and artifact discovery. The supervisor samples up
     { "id": "...", "name": "Sales", "description": "...", "estimatedSize": "small", "createdAt": "..." }
   ],
   "artifacts": [
-    { "id": "...", "name": "Sales Playbook", "description": "...", "isShared": false, "departmentId": "...", "tenantId": "...", "createdAt": "..." }
+    {
+      "id": "...",
+      "name": "Sales Playbook",
+      "description": "...",
+      "isShared": false,
+      "departments": [{ "id": "...", "name": "Sales" }],
+      "tenantId": "...",
+      "createdAt": "..."
+    }
   ]
 }
 ```
 
 When `wasAiAssisted` is `false`, no `ChatModelId` was configured — a fallback `"General"` department with a single artifact was created instead.
+
+---
+
+### GET /api/tenants/{id}/department-manifest
+
+Returns the department manifest for the specified tenant. Returns 404 if none has been set yet.
+
+**No headers required.** The tenant ID is in the path.
+
+**Response 200 OK**
+
+```json
+{
+  "tenantId": "a1a1a1a1-...",
+  "content": "## Departments\n\n- **Engineering** — technical standards...",
+  "updatedAt": "2026-05-10T09:00:00Z"
+}
+```
+
+---
+
+### PUT /api/tenants/{id}/department-manifest
+
+Create or replace the department manifest for a tenant. The AI supervisor reads this manifest to guide routing and discovery decisions. Markdown formatting is recommended.
+
+**Request body**
+
+```json
+{
+  "content": "string (required) — free-text Markdown describing the tenant's department structure"
+}
+```
+
+**Example**
+
+```bash
+curl -s -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"content":"## Departments\n\n- **Sales** — pricing and competitive positioning\n- **Engineering** — technical standards and architecture"}' \
+  http://localhost:8080/api/tenants/a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1/department-manifest
+```
+
+**Response 200 OK** — same shape as GET response.
+
+---
+
+### DELETE /api/tenants/{id}/department-manifest
+
+Removes the department manifest. After deletion the supervisor relies solely on the existing artifact catalog.
+
+**Response 204 No Content**
 
 ---
 
@@ -289,8 +349,7 @@ List all artifacts for a tenant, including the shared artifact. Each entry inclu
     "name": "Company Knowledge",
     "description": "Company-wide goals, mission and cross-cutting policies",
     "isShared": true,
-    "departmentId": null,
-    "departmentName": null,
+    "departments": [],
     "chunkCount": 4,
     "createdAt": "..."
   },
@@ -299,8 +358,9 @@ List all artifacts for a tenant, including the shared artifact. Each entry inclu
     "name": "Technical Standards",
     "description": "Engineering technical standards and architecture decisions",
     "isShared": false,
-    "departmentId": "...",
-    "departmentName": "Engineering",
+    "departments": [
+      { "id": "...", "name": "Engineering" }
+    ],
     "chunkCount": 12,
     "createdAt": "..."
   }
@@ -332,6 +392,24 @@ List all `BusinessContext` chunks stored in a specific artifact.
 ### DELETE /api/artifacts/{id}/contexts
 
 Clear all chunks from an artifact without deleting the artifact itself. Used to re-ingest updated content into a clean artifact.
+
+**Response 204 No Content**
+
+---
+
+### POST /api/artifacts/{id}/departments/{departmentId}
+
+Add a department membership to an artifact. Creates a row in the `ArtifactDepartment` join table. Idempotent — if the link already exists the call succeeds without creating a duplicate.
+
+**No request body required.**
+
+**Response 204 No Content**
+
+---
+
+### DELETE /api/artifacts/{id}/departments/{departmentId}
+
+Remove a department membership from an artifact. Deletes the corresponding row from the `ArtifactDepartment` join table. The artifact and the department themselves are not affected.
 
 **Response 204 No Content**
 

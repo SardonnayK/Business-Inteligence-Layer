@@ -32,9 +32,9 @@ public class ArtifactSupervisorService : IArtifactSupervisorService
         // 2. Try to get chat client — may be null
         IChatClient? chatClient = config is not null ? _chatFactory.GetChatClient(config) : null;
 
-        // 3. Load all Artifacts for this tenant (include Department)
+        // 3. Load all Artifacts for this tenant (include ArtifactDepartments → Department)
         var artifacts = await _db.Artifacts
-            .Include(a => a.Department)
+            .Include(a => a.ArtifactDepartments).ThenInclude(ad => ad.Department)
             .Where(a => a.TenantId == tenantId)
             .ToListAsync(ct);
 
@@ -100,7 +100,6 @@ public class ArtifactSupervisorService : IArtifactSupervisorService
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
-            DepartmentId = null,
             Name = "Company Knowledge",
             Description = "General company knowledge, mission, values, strategy, and cross-departmental policies.",
             IsShared = true,
@@ -122,10 +121,16 @@ public class ArtifactSupervisorService : IArtifactSupervisorService
     {
         try
         {
+            var manifest = await LoadManifestAsync(tenantId, ct);
             var artifactsJson = BuildArtifactsJson(artifacts);
+
+            var manifestSection = manifest is not null
+                ? "Department manifest for this tenant:\n" + manifest.Content + "\n\n"
+                : string.Empty;
 
             var prompt =
                 "You are a knowledge routing supervisor. Route the following text to the correct artifact.\n\n" +
+                manifestSection +
                 "Artifacts (JSON):\n" + artifactsJson + "\n\n" +
                 "Text to route:\n\"" + text + "\"\n\n" +
                 "Reply with ONLY valid JSON — pick one format:\n" +
@@ -214,7 +219,6 @@ public class ArtifactSupervisorService : IArtifactSupervisorService
                     {
                         Id = Guid.NewGuid(),
                         TenantId = tenantId,
-                        DepartmentId = department.Id,
                         Name = artifactName,
                         Description = artifactDesc,
                         IsShared = false,
@@ -222,9 +226,18 @@ public class ArtifactSupervisorService : IArtifactSupervisorService
                         UpdatedAt = DateTime.UtcNow
                     };
                     _db.Artifacts.Add(newArtifact);
+
+                    var artifactDepartment = new ArtifactDepartment
+                    {
+                        ArtifactId = newArtifact.Id,
+                        DepartmentId = department.Id,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _db.ArtifactDepartments.Add(artifactDepartment);
                     await _db.SaveChangesAsync(ct);
 
-                    newArtifact.Department = department;
+                    artifactDepartment.Department = department;
+                    newArtifact.ArtifactDepartments.Add(artifactDepartment);
                     return newArtifact;
                 }
 
@@ -252,14 +265,19 @@ public class ArtifactSupervisorService : IArtifactSupervisorService
 
         try
         {
+            var manifest = await LoadManifestAsync(tenantId, ct);
             var sampleText = string.Join("\n---\n", texts);
+
+            var sizingGuidance = manifest is not null
+                ? "Use this tenant department manifest to guide department naming and artifact sizing:\n" + manifest.Content + "\n\n"
+                : "For each department specify how many artifacts (knowledge documents) it needs based on complexity:\n" +
+                  "- small (focused): 1 artifact\n" +
+                  "- medium: 2 artifacts\n" +
+                  "- large (broad): 3 artifacts\n\n";
 
             var prompt =
                 "Analyze these knowledge base text samples and identify the organizational departments.\n" +
-                "For each department specify how many artifacts (knowledge documents) it needs based on complexity:\n" +
-                "- small (focused): 1 artifact\n" +
-                "- medium: 2 artifacts\n" +
-                "- large (broad): 3 artifacts\n\n" +
+                sizingGuidance +
                 "Samples:\n" + sampleText + "\n\n" +
                 "Reply with ONLY valid JSON:\n" +
                 "{\"departments\":[{\"name\":\"Engineering\",\"description\":\"Technical knowledge and processes\",\"estimatedSize\":\"large\",\"artifacts\":[{\"name\":\"Technical Standards\",\"description\":\"Coding and architecture guidelines\"},{\"name\":\"Engineering Processes\",\"description\":\"Deployment, incidents, sprint rituals\"}]}],\"sharedArtifact\":{\"name\":\"Company Knowledge\",\"description\":\"Mission, values, strategy, cross-departmental policies\"}}";
@@ -329,7 +347,6 @@ public class ArtifactSupervisorService : IArtifactSupervisorService
                                     {
                                         Id = Guid.NewGuid(),
                                         TenantId = tenantId,
-                                        DepartmentId = department.Id,
                                         Name = artName,
                                         Description = artDesc,
                                         IsShared = false,
@@ -337,6 +354,14 @@ public class ArtifactSupervisorService : IArtifactSupervisorService
                                         UpdatedAt = DateTime.UtcNow
                                     };
                                     _db.Artifacts.Add(artifact);
+
+                                    var artifactDept = new ArtifactDepartment
+                                    {
+                                        ArtifactId = artifact.Id,
+                                        DepartmentId = department.Id,
+                                        CreatedAt = DateTime.UtcNow
+                                    };
+                                    _db.ArtifactDepartments.Add(artifactDept);
                                     createdArtifacts.Add(artifact);
                                 }
                             }
@@ -396,7 +421,6 @@ public class ArtifactSupervisorService : IArtifactSupervisorService
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
-            DepartmentId = null,
             Name = sharedName,
             Description = sharedDesc,
             IsShared = true,
@@ -419,7 +443,6 @@ public class ArtifactSupervisorService : IArtifactSupervisorService
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
-            DepartmentId = null,
             Name = "Company Knowledge",
             Description = "Mission, values, strategy, cross-departmental policies.",
             IsShared = true,
@@ -456,7 +479,6 @@ public class ArtifactSupervisorService : IArtifactSupervisorService
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
-                DepartmentId = dept.Id,
                 Name = "General Knowledge",
                 Description = "General organizational knowledge.",
                 IsShared = false,
@@ -464,11 +486,26 @@ public class ArtifactSupervisorService : IArtifactSupervisorService
                 UpdatedAt = DateTime.UtcNow
             };
             _db.Artifacts.Add(artifact);
+
+            var generalArtifactDept = new ArtifactDepartment
+            {
+                ArtifactId = artifact.Id,
+                DepartmentId = dept.Id,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.ArtifactDepartments.Add(generalArtifactDept);
         }
 
         var sharedArtifact = await EnsureSharedArtifactAsync(tenantId, ct);
 
         return (dept, artifact, sharedArtifact);
+    }
+
+    private async Task<DepartmentManifest?> LoadManifestAsync(Guid tenantId, CancellationToken ct)
+    {
+        return await _db.DepartmentManifests
+            .AsNoTracking()
+            .FirstOrDefaultAsync(dm => dm.TenantId == tenantId, ct);
     }
 
     private async Task<EmbeddingProviderConfig?> GetProviderConfigAsync(Guid tenantId, CancellationToken ct)
@@ -499,7 +536,7 @@ public class ArtifactSupervisorService : IArtifactSupervisorService
             sb.Append($",\"name\":{JsonSerializer.Serialize(a.Name)}");
             sb.Append($",\"description\":{JsonSerializer.Serialize(a.Description)}");
             sb.Append($",\"isShared\":{(a.IsShared ? "true" : "false")}");
-            sb.Append($",\"department\":{JsonSerializer.Serialize(a.Department?.Name ?? string.Empty)}");
+            sb.Append($",\"department\":{JsonSerializer.Serialize(a.ArtifactDepartments.FirstOrDefault()?.Department?.Name ?? string.Empty)}");
             sb.Append('}');
             if (i < artifacts.Count - 1) sb.Append(',');
         }

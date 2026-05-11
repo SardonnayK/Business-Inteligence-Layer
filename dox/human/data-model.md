@@ -2,21 +2,23 @@
 
 ## Entity relationships
 
-The schema has seven tables. The core of the system is a four-level hierarchy rooted at `Tenant`.
+The schema has nine tables. The core of the system is a four-level hierarchy rooted at `Tenant`.
 
 ```
 Tenant
 ├── EmbeddingProviderConfig (optional; one tenant-specific or one system-default)
+├── DepartmentManifest (optional; one per tenant; free-text guidance blob for the AI supervisor)
 ├── Department (zero or many; discovered by AI or created manually)
-│   └── Artifact (1–3 per department based on size)
-│       └── BusinessContext (chunks with vector embeddings)
+│   └── ArtifactDepartment (join table — one Artifact may belong to many Departments)
+│       └── Artifact
+│           └── BusinessContext (chunks with vector embeddings)
 ├── Artifact [IsShared=true] (exactly one per tenant; not owned by any department)
 │   └── BusinessContext
 ├── Project (workstream container)
 │   └── Requirement (rules and constraints)
 ```
 
-`Department` → `Artifact` → `BusinessContext` is the knowledge hierarchy. `Project` and `Requirement` are the structured, relational side — they exist for reference and are not involved in the RAG search path.
+`Department` → `ArtifactDepartment` → `Artifact` → `BusinessContext` is the knowledge hierarchy. An artifact may be linked to more than one department via the `ArtifactDepartment` join table. `Project` and `Requirement` are the structured, relational side — they exist for reference and are not involved in the RAG search path.
 
 ---
 
@@ -57,9 +59,40 @@ The API key is never returned by the API — the `GET` endpoints return a `hasAp
 
 ---
 
+## Entity: DepartmentManifest
+
+A free-text guidance blob stored per tenant. The AI supervisor reads this manifest when making routing and discovery decisions, so it provides a stable description of what departments exist and what they should contain. Markdown is recommended for readability.
+
+| Column | Type | Notes |
+|---|---|---|
+| `Id` | `uuid` (PK) | |
+| `TenantId` | `uuid` (FK → Tenant, unique) | One manifest per tenant |
+| `Content` | `text` | Free-text (Markdown recommended). Describes the tenant's department structure and routing guidance for the supervisor |
+| `UpdatedAt` | `timestamptz` | Updated on every PUT |
+
+The manifest is optional. When absent, the supervisor relies solely on the existing artifact catalog. When present, it overrides or supplements the catalog descriptions to steer routing.
+
+**Example manifest content:**
+
+```markdown
+## Departments
+
+- **Engineering** — technical standards, architecture decisions, and development processes
+- **HR** — policies, recruitment, and employee lifecycle
+- **Sales** — playbooks, pricing guidance, and competitive positioning
+- **Legal** — contracts, compliance obligations, and regulatory requirements
+
+## Routing notes
+
+Content mentioning SLAs should go to Engineering unless it is a commercial commitment, in which case route to Sales.
+Cross-cutting strategy content belongs in the shared artifact.
+```
+
+---
+
 ## Entity: Department
 
-A logical division within a tenant. Departments are discovered automatically by the AI supervisor analyzing existing knowledge, or created manually. Each department contains one or more artifacts.
+A logical division within a tenant. Departments are discovered automatically by the AI supervisor analyzing existing knowledge, or created manually. Artifacts are linked to departments via the `ArtifactDepartment` join table, so a single artifact may appear in multiple departments.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -70,32 +103,40 @@ A logical division within a tenant. Departments are discovered automatically by 
 | `EstimatedSize` | `text` | `"small"`, `"medium"`, or `"large"` — set by the AI when the department is discovered |
 | `CreatedAt` | `timestamptz` | |
 
-Department size determines how many artifacts the AI creates within it:
+The `EstimatedSize` field is a hint to the supervisor, but artifact counts are no longer hardcoded to size. The tenant's `DepartmentManifest` takes precedence: when a manifest is present its guidance determines how many and what kind of artifacts belong in a department. In the absence of a manifest the supervisor uses its own judgement based on content volume and semantic coherence.
 
-| Size | Artifact count | When used |
+---
+
+## Entity: ArtifactDepartment
+
+Join table that links artifacts to departments. Replaces the former `DepartmentId` foreign key on `Artifact`, allowing an artifact to belong to more than one department.
+
+| Column | Type | Notes |
 |---|---|---|
-| `small` | 1 | Narrow departments with a single coherent knowledge area |
-| `medium` | 2 | Departments with two distinct sub-topics |
-| `large` | 3 | Broad departments needing 3 focused, semantically coherent artifacts |
+| `ArtifactId` | `uuid` (FK → Artifact) | Composite PK |
+| `DepartmentId` | `uuid` (FK → Department) | Composite PK |
+
+The composite primary key `(ArtifactId, DepartmentId)` prevents duplicate links. Deleting a `Department` or `Artifact` cascades the corresponding join rows.
 
 ---
 
 ## Entity: Artifact
 
-A scoped knowledge document within a department (or the shared cross-cutting artifact). Each artifact is the container for a set of related `BusinessContext` chunks.
+A scoped knowledge document that may belong to one or more departments (via `ArtifactDepartment`), or be the shared cross-cutting artifact. Each artifact is the container for a set of related `BusinessContext` chunks.
 
 | Column | Type | Notes |
 |---|---|---|
 | `Id` | `uuid` (PK) | |
 | `TenantId` | `uuid` (FK → Tenant) | |
-| `DepartmentId` | `uuid` (FK → Department, nullable) | `null` for the shared artifact |
 | `Name` | `text` | Document title (e.g. `"Technical Standards"`, `"Company Knowledge"`) |
 | `Description` | `text` | What this artifact holds |
 | `IsShared` | `boolean` | `true` only for the single shared/cross-cutting artifact per tenant |
 | `CreatedAt` | `timestamptz` | |
 | `UpdatedAt` | `timestamptz` | |
 
-**Shared artifact:** Every tenant has exactly one artifact where `IsShared = true` and `DepartmentId = null`. This artifact stores company-wide goals, mission statements, cross-cutting policies, and anything all departments must work toward together. It is created automatically on first ingest if no artifacts exist yet.
+Department membership is recorded in the `ArtifactDepartment` join table, not as a column on this entity. API responses expose department membership as `departments: [{id, name}]` — an array, because an artifact may belong to more than one department.
+
+**Shared artifact:** Every tenant has exactly one artifact where `IsShared = true`. This artifact stores company-wide goals, mission statements, cross-cutting policies, and anything all departments must work toward together. It is created automatically on first ingest if no artifacts exist yet. The shared artifact has no entries in `ArtifactDepartment`.
 
 ---
 
@@ -183,11 +224,15 @@ Projects: SuburbanEdge Rollout Programme, ZeroCap Disruptive Pricing Programme, 
 Every query through `HybridRagService` filters by `TenantId` before computing vector distances:
 
 ```sql
-SELECT * FROM "BusinessContexts"
-WHERE "TenantId" = @tenantId            -- relational pre-filter
-  [AND "ArtifactId" = @artifactId]      -- optional artifact scope
-  [AND artifact."DepartmentId" = @deptId] -- optional department scope
-ORDER BY "Embedding" <-> @queryVector   -- vector distance
+SELECT bc.* FROM "BusinessContexts" bc
+WHERE bc."TenantId" = @tenantId                   -- relational pre-filter
+  [AND bc."ArtifactId" = @artifactId]             -- optional artifact scope
+  [AND EXISTS (                                   -- optional department scope
+      SELECT 1 FROM "ArtifactDepartments" ad
+      WHERE ad."ArtifactId" = bc."ArtifactId"
+        AND ad."DepartmentId" = @deptId
+  )]
+ORDER BY bc."Embedding" <-> @queryVector          -- vector distance
 LIMIT @topK
 ```
 

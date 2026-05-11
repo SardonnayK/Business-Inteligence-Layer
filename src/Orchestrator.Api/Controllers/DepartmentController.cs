@@ -30,6 +30,7 @@ public class DepartmentController : ControllerBase
         var tenantId = GetTenantId();
         var departments = await _db.Departments
             .AsNoTracking()
+            .Include(d => d.ArtifactDepartments)
             .Where(d => d.TenantId == tenantId)
             .Select(d => new
             {
@@ -38,7 +39,7 @@ public class DepartmentController : ControllerBase
                 d.Description,
                 d.EstimatedSize,
                 d.CreatedAt,
-                artifactCount = _db.Artifacts.Count(a => a.DepartmentId == d.Id)
+                artifactCount = d.ArtifactDepartments.Count
             })
             .ToListAsync(ct);
 
@@ -69,9 +70,9 @@ public class DepartmentController : ControllerBase
                 a.Name,
                 a.Description,
                 a.IsShared,
-                a.DepartmentId,
                 a.TenantId,
-                a.CreatedAt
+                a.CreatedAt,
+                departments = a.ArtifactDepartments.Select(ad => new { id = ad.DepartmentId, name = ad.Department != null ? ad.Department.Name : null })
             })
         });
     }

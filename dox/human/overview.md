@@ -20,6 +20,7 @@ An **AI supervisor** runs on every ingestion. Rather than dumping all knowledge 
 | **Shared Artifact** | One special artifact per tenant, not owned by any department — holds company-wide goals, mission, and cross-cutting policies. |
 | **BusinessContext** | A single text chunk with its vector embedding. Always stored inside an artifact. |
 | **Supervisor** | An LLM-powered routing agent. On each ingest it reads the text, looks at the tenant's artifact catalog, and decides where the new content belongs. |
+| **DepartmentManifest** | Optional free-text (Markdown) blob per tenant. Describes the intended department structure and routing rules. Read by the AI supervisor at ingest and discovery time. |
 | **EmbeddingProviderConfig** | Per-tenant (or system-wide default) configuration selecting which AI provider and model to use for both embeddings and the supervisor LLM. |
 
 ---
@@ -100,8 +101,9 @@ graph TD
 ```
 
 - The **shared artifact** is always present and spans all departments. It captures mission, values, strategic goals, and anything that every department must work toward together.
-- Departments are sized by the AI as **small** (1 artifact), **medium** (2 artifacts), or **large** (3 artifacts). A large Engineering department splits its knowledge into focused artifacts (standards vs. processes) so each artifact stays semantically coherent.
-- Every `BusinessContext` chunk belongs to exactly one artifact, inheriting its department scope.
+- Departments are sized by the AI as **small**, **medium**, or **large**. The number of artifacts created within a department is guided by the tenant's **DepartmentManifest** — a free-text blob that describes the intended department structure. When no manifest is set, the supervisor uses its own judgement based on content volume and semantic coherence. A large Engineering department might split into focused artifacts (standards vs. processes) so each stays semantically coherent.
+- An artifact may belong to more than one department. Department membership is tracked in the `ArtifactDepartment` join table, not as a single column on the artifact.
+- Every `BusinessContext` chunk belongs to exactly one artifact.
 
 ---
 
@@ -143,7 +145,7 @@ sequenceDiagram
     Embedder-->>API: float[] vector
 
     API->>DB: INSERT BusinessContext\n(text, vector, artifactId, tenantId)
-    API-->>Client: {id, artifactId, artifactName,\ndepartmentId, departmentName, isShared}
+    API-->>Client: {id, artifactId, artifactName,\ndepartments: [{id, name}], isShared}
 ```
 
 The response tells the caller exactly where the text was placed — which artifact and which department.
@@ -167,7 +169,7 @@ sequenceDiagram
     alt artifactId supplied
         API->>DB: WHERE ArtifactId = @id\nORDER BY Embedding <-> @vec\nLIMIT topK
     else departmentId supplied
-        API->>DB: WHERE Artifact.DepartmentId = @id\nORDER BY Embedding <-> @vec\nLIMIT topK
+        API->>DB: JOIN ArtifactDepartments ON DepartmentId = @id\nORDER BY Embedding <-> @vec\nLIMIT topK
     else tenant-wide
         API->>DB: WHERE TenantId = @id\nORDER BY Embedding <-> @vec\nLIMIT topK
     end

@@ -106,7 +106,7 @@ public class UserController : ControllerBase
 
         var artifacts = await _db.Artifacts
             .AsNoTracking()
-            .Include(a => a.Department)
+            .Include(a => a.ArtifactDepartments).ThenInclude(ad => ad.Department)
             .Where(a => a.TenantId == tenantId)
             .ToListAsync(ct);
 
@@ -122,7 +122,7 @@ public class UserController : ControllerBase
             {
                 a.Id,
                 a.Name,
-                departmentName = a.Department?.Name,
+                departmentName = a.ArtifactDepartments.FirstOrDefault()?.Department?.Name,
                 a.IsShared,
                 canRead = perm?.CanRead ?? false,
                 canWrite = perm?.CanWrite ?? false
