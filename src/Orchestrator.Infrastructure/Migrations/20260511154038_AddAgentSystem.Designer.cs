@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orchestrator.Infrastructure.Data;
@@ -12,9 +13,11 @@ using Pgvector;
 namespace Orchestrator.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260511154038_AddAgentSystem")]
+    partial class AddAgentSystem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -285,53 +288,6 @@ namespace Orchestrator.Infrastructure.Migrations
                     b.ToTable("EmbeddingProviderConfigs");
                 });
 
-            modelBuilder.Entity("Orchestrator.Core.Entities.McpIntegration", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ApiKey")
-                        .HasColumnType("text");
-
-                    b.Property<string>("AuthHeaderName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("CachedToolsJson")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ServerUrl")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ToolNamesJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId");
-
-                    b.ToTable("McpIntegrations");
-                });
-
             modelBuilder.Entity("Orchestrator.Core.Entities.Project", b =>
                 {
                     b.Property<Guid>("Id")
@@ -544,17 +500,6 @@ namespace Orchestrator.Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("Orchestrator.Core.Entities.McpIntegration", b =>
-                {
-                    b.HasOne("Orchestrator.Core.Entities.Tenant", "Tenant")
-                        .WithMany("McpIntegrations")
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Tenant");
-                });
-
             modelBuilder.Entity("Orchestrator.Core.Entities.Project", b =>
                 {
                     b.HasOne("Orchestrator.Core.Entities.Tenant", "Tenant")
@@ -618,8 +563,6 @@ namespace Orchestrator.Infrastructure.Migrations
                     b.Navigation("DepartmentManifest");
 
                     b.Navigation("Departments");
-
-                    b.Navigation("McpIntegrations");
 
                     b.Navigation("Projects");
 

@@ -10,7 +10,7 @@ export class ApiError extends Error {
   }
 }
 
-function getStoredToken(): string | null {
+export function getStoredToken(): string | null {
   try {
     const raw = localStorage.getItem('bi_auth')
     if (!raw) return null

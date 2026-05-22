@@ -11,6 +11,9 @@ import ProjectsPage from './pages/ProjectsPage'
 import HealthPage from './pages/HealthPage'
 import SettingsPage from './pages/SettingsPage'
 import UsersPage from './pages/UsersPage'
+import AgentsPage from './pages/AgentsPage'
+import AnalysePage from './pages/AnalysePage'
+import IntegrationsPage from './pages/IntegrationsPage'
 import { getTenants } from './api/tenants'
 import type { Tenant } from './api/tenants'
 
@@ -65,6 +68,9 @@ function ProtectedRoutes() {
         <Route path="/health" element={<HealthPage />} />
         <Route path="/settings" element={<SettingsPage {...sharedProps} />} />
         <Route path="/users" element={<UsersPage />} />
+        <Route path="/agents" element={<AgentsPage />} />
+        <Route path="/analyse" element={<AnalysePage {...sharedProps} />} />
+        <Route path="/integrations" element={<IntegrationsPage />} />
       </Route>
     </Routes>
   )

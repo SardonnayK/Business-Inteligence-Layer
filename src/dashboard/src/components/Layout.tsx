@@ -24,6 +24,9 @@ export default function Layout() {
           <NavLink to="/" end className={navClass}>
             <HomeIcon /> Dashboard
           </NavLink>
+          <NavLink to="/analyse" className={navClass}>
+            <AnalyseIcon /> BI Analyst
+          </NavLink>
           <NavLink to="/tenants" className={navClass}>
             <TenantsIcon /> Tenants
           </NavLink>
@@ -45,6 +48,16 @@ export default function Layout() {
           {isAdmin && (
             <NavLink to="/users" className={navClass}>
               <UsersIcon /> Users
+            </NavLink>
+          )}
+          {isAdmin && (
+            <NavLink to="/agents" className={navClass}>
+              <AgentsIcon /> Agents
+            </NavLink>
+          )}
+          {isAdmin && (
+            <NavLink to="/integrations" className={navClass}>
+              <IntegrationsIcon /> Integrations
             </NavLink>
           )}
         </nav>
@@ -150,6 +163,30 @@ function UsersIcon() {
   return (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+    </svg>
+  )
+}
+
+function AnalyseIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+    </svg>
+  )
+}
+
+function AgentsIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15M14.25 3.104c.251.023.501.05.75.082M19.8 15l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.607L5 14.5m14.8.5l.39 1.565a2.25 2.25 0 01-2.13 2.935H5.94a2.25 2.25 0 01-2.13-2.935L4.2 16.5" />
+    </svg>
+  )
+}
+
+function IntegrationsIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
     </svg>
   )
 }

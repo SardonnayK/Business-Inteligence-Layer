@@ -2,7 +2,9 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using ModelContextProtocol.Server;
 using Orchestrator.Api.Auth;
+using Orchestrator.Api.Mcp;
 using Orchestrator.Api.Middleware;
 using Orchestrator.Core.Entities;
 using Orchestrator.Core.Enums;
@@ -54,6 +56,10 @@ builder.AddNpgsqlDbContext<AppDbContext>("orchestrator",
 
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
+builder.Services.AddMcpServer()
+    .WithHttpTransport()
+    .WithTools<BiLayerMcpTools>();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -82,6 +88,49 @@ using (var scope = app.Services.CreateScope())
             await db.SaveChangesAsync();
         }
     }
+
+    if (!await db.AgentRegistrations.AnyAsync(ar => ar.TenantId == null))
+    {
+        db.AgentRegistrations.AddRange(
+            new Orchestrator.Core.Entities.AgentRegistration
+            {
+                Id = Guid.NewGuid(),
+                AgentType = Orchestrator.Core.Enums.AgentType.BuiltIn,
+                Capability = Orchestrator.Core.Enums.AgentCapability.Ingest,
+                Name = "Ingestion Agent",
+                Priority = 10,
+                IsEnabled = true
+            },
+            new Orchestrator.Core.Entities.AgentRegistration
+            {
+                Id = Guid.NewGuid(),
+                AgentType = Orchestrator.Core.Enums.AgentType.BuiltIn,
+                Capability = Orchestrator.Core.Enums.AgentCapability.Discover,
+                Name = "Supervisor Agent",
+                Priority = 10,
+                IsEnabled = true
+            },
+            new Orchestrator.Core.Entities.AgentRegistration
+            {
+                Id = Guid.NewGuid(),
+                AgentType = Orchestrator.Core.Enums.AgentType.BuiltIn,
+                Capability = Orchestrator.Core.Enums.AgentCapability.Query,
+                Name = "Supervisor Agent",
+                Priority = 10,
+                IsEnabled = true
+            },
+            new Orchestrator.Core.Entities.AgentRegistration
+            {
+                Id = Guid.NewGuid(),
+                AgentType = Orchestrator.Core.Enums.AgentType.BuiltIn,
+                Capability = Orchestrator.Core.Enums.AgentCapability.General,
+                Name = "General Agent",
+                Priority = 5,
+                IsEnabled = true
+            }
+        );
+        await db.SaveChangesAsync();
+    }
 }
 
 if (app.Environment.IsDevelopment())
@@ -102,4 +151,22 @@ app.UseAuthorization();
 app.UseMiddleware<GuardrailMiddleware>();
 app.MapControllers();
 app.MapDefaultEndpoints();
+
+// MCP server — protected by API key (X-Api-Key header)
+var mcpApiKeys = app.Configuration.GetSection("Mcp:ApiKeys").Get<string[]>() ?? [];
+app.MapMcp("/mcp").AddEndpointFilter(async (ctx, next) =>
+{
+    if (mcpApiKeys.Length > 0)
+    {
+        if (!ctx.HttpContext.Request.Headers.TryGetValue("X-Api-Key", out var key)
+            || !mcpApiKeys.Contains(key.ToString()))
+        {
+            ctx.HttpContext.Response.StatusCode = 401;
+            await ctx.HttpContext.Response.WriteAsync("Unauthorized: valid X-Api-Key required.");
+            return null;
+        }
+    }
+    return await next(ctx);
+});
+
 app.Run();

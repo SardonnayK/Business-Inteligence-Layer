@@ -13,4 +13,7 @@ public class Tenant
     public ICollection<Artifact> Artifacts { get; set; } = new List<Artifact>();
     public ICollection<TenantUser> Users { get; set; } = new List<TenantUser>();
     public DepartmentManifest? DepartmentManifest { get; set; }
+    public string? AgentConfigJson { get; set; }
+    public ICollection<AgentRegistration> AgentRegistrations { get; set; } = new List<AgentRegistration>();
+    public ICollection<McpIntegration> McpIntegrations { get; set; } = new List<McpIntegration>();
 }

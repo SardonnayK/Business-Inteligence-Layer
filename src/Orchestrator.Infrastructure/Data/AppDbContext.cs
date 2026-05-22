@@ -18,6 +18,8 @@ public class AppDbContext : DbContext
     public DbSet<ArtifactPermission> ArtifactPermissions => Set<ArtifactPermission>();
     public DbSet<ArtifactDepartment> ArtifactDepartments => Set<ArtifactDepartment>();
     public DbSet<DepartmentManifest> DepartmentManifests => Set<DepartmentManifest>();
+    public DbSet<AgentRegistration> AgentRegistrations => Set<AgentRegistration>();
+    public DbSet<McpIntegration> McpIntegrations => Set<McpIntegration>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -26,6 +28,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Tenant>(b =>
         {
             b.HasKey(t => t.Id);
+            b.Property(t => t.AgentConfigJson).IsRequired(false);
             b.HasMany(t => t.Projects).WithOne(p => p.Tenant).HasForeignKey(p => p.TenantId);
             b.HasMany(t => t.BusinessContexts).WithOne(bc => bc.Tenant).HasForeignKey(bc => bc.TenantId);
             b.HasMany(t => t.Departments).WithOne(d => d.Tenant).HasForeignKey(d => d.TenantId);
@@ -108,6 +111,29 @@ public class AppDbContext : DbContext
             b.HasIndex(ap => ap.UserId);
             b.HasIndex(ap => ap.ArtifactId);
             b.HasIndex(ap => new { ap.UserId, ap.ArtifactId }).IsUnique();
+        });
+
+        modelBuilder.Entity<AgentRegistration>(b =>
+        {
+            b.HasKey(ar => ar.Id);
+            b.Property(ar => ar.AgentType).HasConversion<int>();
+            b.Property(ar => ar.Capability).HasConversion<int>();
+            b.Property(ar => ar.TenantId).IsRequired(false);
+            b.HasIndex(ar => new { ar.TenantId, ar.Capability });
+            b.HasOne(ar => ar.Tenant).WithMany(t => t.AgentRegistrations)
+             .HasForeignKey(ar => ar.TenantId).IsRequired(false).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<McpIntegration>(b =>
+        {
+            b.HasKey(m => m.Id);
+            b.Property(m => m.Name).IsRequired();
+            b.Property(m => m.ServerUrl).IsRequired();
+            b.Property(m => m.ApiKey).IsRequired(false);
+            b.Property(m => m.CachedToolsJson).IsRequired(false);
+            b.HasOne(m => m.Tenant).WithMany(t => t.McpIntegrations)
+             .HasForeignKey(m => m.TenantId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(m => m.TenantId);
         });
     }
 }
